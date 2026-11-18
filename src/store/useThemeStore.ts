@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import type { EditorSettings } from '../types/ide';
 
@@ -6,8 +7,10 @@ export type ThemeMode = 'dark' | 'light';
 interface ThemeState {
   theme: ThemeMode;
   editorSettings: EditorSettings;
+
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
+
   updateEditorSettings: (patch: Partial<EditorSettings>) => void;
   resetEditorSettings: () => void;
 }
@@ -24,78 +27,168 @@ const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   formatOnSave: false,
 };
 
+// Safely access browser storage
+function getStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+// Validate theme
 function readInitialTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'dark';
+  const storage = getStorage();
+
   try {
-    const saved = window.localStorage.getItem(THEME_KEY);
-    if (saved === 'light' || saved === 'dark') {
-      return saved;
-    }
+    const saved = storage?.getItem(THEME_KEY);
+    return saved === 'light' || saved === 'dark'
+      ? saved
+      : 'dark';
   } catch {
-    // Ignore storage read failures
+    return 'dark';
   }
-  return 'dark';
 }
 
+// Validate editor settings
+function validateEditorSettings(
+  settings: Partial<EditorSettings>
+): EditorSettings {
+  return {
+    fontSize:
+      typeof settings.fontSize === 'number' &&
+      Number.isFinite(settings.fontSize) &&
+      settings.fontSize >= 8 &&
+      settings.fontSize <= 40
+        ? settings.fontSize
+        : DEFAULT_EDITOR_SETTINGS.fontSize,
+
+    tabSize:
+      settings.tabSize === 2 ||
+      settings.tabSize === 4 ||
+      settings.tabSize === 8
+        ? settings.tabSize
+        : DEFAULT_EDITOR_SETTINGS.tabSize,
+
+    minimap:
+      typeof settings.minimap === 'boolean'
+        ? settings.minimap
+        : DEFAULT_EDITOR_SETTINGS.minimap,
+
+    wordWrap:
+      settings.wordWrap === 'on' ||
+      settings.wordWrap === 'off'
+        ? settings.wordWrap
+        : DEFAULT_EDITOR_SETTINGS.wordWrap,
+
+    lineNumbers:
+      settings.lineNumbers === 'on' ||
+      settings.lineNumbers === 'off'
+        ? settings.lineNumbers
+        : DEFAULT_EDITOR_SETTINGS.lineNumbers,
+
+    formatOnSave:
+      typeof settings.formatOnSave === 'boolean'
+        ? settings.formatOnSave
+        : DEFAULT_EDITOR_SETTINGS.formatOnSave,
+  };
+}
+
+// Load editor settings
 function readInitialSettings(): EditorSettings {
-  if (typeof window === 'undefined') return DEFAULT_EDITOR_SETTINGS;
+  const storage = getStorage();
+
   try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_EDITOR_SETTINGS;
-    return { ...DEFAULT_EDITOR_SETTINGS, ...(JSON.parse(raw) as Partial<EditorSettings>) };
+    const raw = storage?.getItem(SETTINGS_KEY);
+
+    if (!raw) return { ...DEFAULT_EDITOR_SETTINGS };
+
+    const parsed: unknown = JSON.parse(raw);
+
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return { ...DEFAULT_EDITOR_SETTINGS };
+    }
+
+    return validateEditorSettings(
+      parsed as Partial<EditorSettings>
+    );
   } catch {
-    return DEFAULT_EDITOR_SETTINGS;
+    return { ...DEFAULT_EDITOR_SETTINGS };
   }
 }
 
+// Persist data safely
+function persist(key: string, value: string): void {
+  try {
+    getStorage()?.setItem(key, value);
+  } catch {
+    // Storage may be unavailable or full.
+    // Keep the application state functional.
+  }
+}
+
+// Apply theme to document
 export function applyThemeToDocument(theme: ThemeMode): void {
   if (typeof document === 'undefined') return;
+
   const root = document.documentElement;
-  if (theme === 'dark') {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
-  }
+
+  root.classList.toggle('dark', theme === 'dark');
+  root.style.colorScheme = theme;
 }
 
+// Initialize theme
 const initialTheme = readInitialTheme();
-applyThemeToDocument(initialTheme);
 
+if (typeof document !== 'undefined') {
+  applyThemeToDocument(initialTheme);
+}
+
+// Zustand store
 export const useThemeStore = create<ThemeState>((set, get) => ({
   theme: initialTheme,
+
   editorSettings: readInitialSettings(),
 
+  // Change theme
   setTheme: (theme) => {
     applyThemeToDocument(theme);
-    try {
-      window.localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      // Ignore storage write failures
-    }
+    persist(THEME_KEY, theme);
     set({ theme });
   },
 
+  // Toggle theme
   toggleTheme: () => {
-    const next: ThemeMode = get().theme === 'dark' ? 'light' : 'dark';
-    get().setTheme(next);
+    const nextTheme =
+      get().theme === 'dark' ? 'light' : 'dark';
+
+    get().setTheme(nextTheme);
   },
 
+  // Update editor settings
   updateEditorSettings: (patch) => {
-    const updated = { ...get().editorSettings, ...patch };
-    try {
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
-    } catch {
-      // Ignore storage write failures
-    }
+    const updated = validateEditorSettings({
+      ...get().editorSettings,
+      ...patch,
+    });
+
+    persist(SETTINGS_KEY, JSON.stringify(updated));
+
     set({ editorSettings: updated });
   },
 
+  // Reset editor settings
   resetEditorSettings: () => {
-    try {
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_EDITOR_SETTINGS));
-    } catch {
-      // Ignore storage write failures
-    }
-    set({ editorSettings: DEFAULT_EDITOR_SETTINGS });
+    const defaults = { ...DEFAULT_EDITOR_SETTINGS };
+
+    persist(SETTINGS_KEY, JSON.stringify(defaults));
+
+    set({ editorSettings: defaults });
   },
 }));

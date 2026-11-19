@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { apiClient } from '../src/services/api/client';
+import { ApiStorageAdapter } from '../src/services/storage/ApiStorageAdapter';
 import { LocalStorageAdapter } from '../src/services/storage/LocalStorageAdapter';
+import { useAuthStore } from '../src/store/useAuthStore';
 import { setStorageAdapter, useWorkspaceStore } from '../src/store/useWorkspaceStore';
 import { buildFileTree } from '../src/utils/fileTree';
 import { detectMonacoLanguage } from '../src/utils/language';
@@ -28,8 +31,9 @@ function createMemoryStorage(): Storage {
   };
 }
 
-describe('Phase 1 Cloud IDE Store & Persistence', () => {
+describe('Phase 1 & Phase 2 Frontend Store & API Integration', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     const memoryStorage = createMemoryStorage();
     Object.defineProperty(globalThis, 'localStorage', {
       value: memoryStorage,
@@ -47,18 +51,30 @@ describe('Phase 1 Cloud IDE Store & Persistence', () => {
       openTabIds: [],
       activeFileId: null,
       drafts: {},
+      savingFileIds: {},
+      saveError: null,
       expandedFolders: {},
       problemsByFile: {},
       outputLogs: [],
       terminalSessions: [],
       activeTerminalId: null,
     });
+    useAuthStore.setState({
+      user: null,
+      accessToken: null,
+      initialized: false,
+      loading: false,
+      error: null,
+    });
   });
 
-  it('seeds CloudIDE-Demo workspace with expected nested structure', async () => {
+  it('seeds CloudIDE-Demo workspace via adapter and builds nested file tree', async () => {
+    const adapter = new LocalStorageAdapter();
+    setStorageAdapter(adapter);
+    await adapter.seedDemoIfEmpty();
     await useWorkspaceStore.getState().initializeWorkspaces();
-    const { workspaces } = useWorkspaceStore.getState();
 
+    const { workspaces } = useWorkspaceStore.getState();
     expect(workspaces.length).toBe(1);
     expect(workspaces[0].name).toBe('CloudIDE-Demo');
 
@@ -77,7 +93,7 @@ describe('Phase 1 Cloud IDE Store & Persistence', () => {
     expect(tree.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('creates, opens, edits, saves, and persists files across reloads', async () => {
+  it('creates, opens, edits, saves, and persists files', async () => {
     const ws = await useWorkspaceStore.getState().createWorkspace({
       name: 'cpp-engine',
       language: 'cpp',
@@ -93,18 +109,17 @@ describe('Phase 1 Cloud IDE Store & Persistence', () => {
     expect(createdFile.path).toBe('nested/helper.cpp');
     expect(createdFile.language).toBe('cpp');
 
-    useWorkspaceStore.getState().updateDraft(createdFile.id, 'int add(int a, int b) { return a + b; }');
+    useWorkspaceStore
+      .getState()
+      .updateDraft(createdFile.id, 'int add(int a, int b) { return a + b; }');
 
-    // Closing a dirty tab without force requests confirmation
     const firstClose = useWorkspaceStore.getState().closeTab(createdFile.id, false);
     expect(firstClose.needsConfirmation).toBe(true);
     expect(firstClose.closed).toBe(false);
 
-    // Save commits draft and persists
     await useWorkspaceStore.getState().saveFile(createdFile.id);
     expect(useWorkspaceStore.getState().drafts[createdFile.id]).toBeUndefined();
 
-    // Re-opening workspace reads persisted content
     await useWorkspaceStore.getState().openWorkspace(ws.id);
     const reloaded = useWorkspaceStore
       .getState()
@@ -144,5 +159,63 @@ describe('Phase 1 Cloud IDE Store & Persistence', () => {
     expect(detectMonacoLanguage('style.css')).toBe('css');
     expect(detectMonacoLanguage('package.json')).toBe('json');
     expect(detectMonacoLanguage('README.md')).toBe('markdown');
+  });
+
+  it('integrates ApiStorageAdapter and useAuthStore with REST API endpoints', async () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Logged in',
+        data: {
+          user: {
+            id: 'u1',
+            name: 'Tejas',
+            email: 'tejas@cloudide.dev',
+            role: 'user',
+            createdAt: '2026-11-19T00:00:00.000Z',
+            updatedAt: '2026-11-19T00:00:00.000Z',
+          },
+          accessToken: 'jwt_access_123',
+        },
+      },
+    });
+
+    const user = await useAuthStore.getState().login({
+      email: 'tejas@cloudide.dev',
+      password: 'Password123!',
+    });
+    expect(user.email).toBe('tejas@cloudide.dev');
+    expect(useAuthStore.getState().accessToken).toBe('jwt_access_123');
+    expect(postSpy).toHaveBeenCalledWith('/auth/login', {
+      email: 'tejas@cloudide.dev',
+      password: 'Password123!',
+    });
+
+    const apiAdapter = new ApiStorageAdapter();
+    setStorageAdapter(apiAdapter);
+
+    const putSpy = vi.spyOn(apiClient, 'put').mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'File saved',
+        data: {
+          file: {
+            id: 'f1',
+            workspaceId: 'w1',
+            filename: 'main.py',
+            path: 'src/main.py',
+            parentPath: 'src',
+            type: 'file',
+            content: 'print("saved")',
+            language: 'python',
+            updatedAt: '2026-11-19T00:00:00.000Z',
+          },
+        },
+      },
+    });
+
+    const saved = await apiAdapter.updateFileContent('f1', 'print("saved")');
+    expect(putSpy).toHaveBeenCalledWith('/files/f1', { content: 'print("saved")' });
+    expect(saved.content).toBe('print("saved")');
   });
 });

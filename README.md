@@ -1,34 +1,31 @@
 # Distributed Cloud IDE & Sandboxed Code Execution Platform
 
-**Phase 1: Project Foundation & Cloud IDE Frontend**
+**Phase 2: Backend Development, Authentication & MongoDB Workspace Persistence**
 
-A browser-based, VS Code-inspired Cloud IDE built with React, TypeScript, Vite, Tailwind CSS, Monaco Editor, Zustand, React Router, and `react-resizable-panels`.
+A full-stack, VS Code-inspired Cloud IDE connecting the Phase 1 React + Monaco frontend to an Express.js + TypeScript + MongoDB + Mongoose backend with JWT authentication, HTTP-only refresh cookies, workspace ownership isolation, and persistent hierarchical file/folder storage.
 
 ---
 
-## Implemented in Phase 1
+## Implemented Through Phase 2
 
-- **Workspace Dashboard (`/`)**:
-  - Automatic seeding of the `CloudIDE-Demo` multi-language sample workspace (`src/main.py`, `src/utils.py`, `javascript/app.js`, `web/index.html`, `web/style.css`, `README.md`)
-  - Create Workspace modal supporting Python, JavaScript, Java, C, and C++ with `Empty project`, `Hello World`, and `Basic web project` starter templates
-  - Search workspaces, filter by language, view recent workspaces, rename workspaces, and delete workspaces with confirmation
+### Frontend (React + TypeScript + Vite + Monaco)
+- **Authentication & Account Views**: `/login`, `/register`, `/profile` (profile update & password change), and `<ProtectedRoute>` session restoration via HTTP-only refresh cookies.
+- **Centralized Axios Client (`src/services/api/client.ts`)**: Bearer access-token injection, single-flight automatic 401 token refresh & retry, and normalized API error handling.
+- **Workspace Dashboard (`/`)**: MongoDB-backed workspace creation, search, language filter, sort (`Last Modified`, `Created Date`, `Name`), pagination, rename, delete, and one-click `CloudIDE-Demo` creation.
 - **IDE Workbench (`/workspace/:id`)**:
-  - **Top Navigation Bar**: Brand navigation, workspace name & language context, save status indicator, explicit Phase 5 Run placeholder notice, panel toggle, settings, and user profile menu
-  - **Activity Bar**: Switch between Explorer, Search, Source Control (showing unsaved local edits), Extensions & Runtimes, and Settings
-  - **File Explorer**: Nested folders, inline file/folder creation, inline rename (cascading descendant paths), delete confirmation, context menu, and language icons
-  - **Monaco Code Editor**: Multi-file tabs, dirty change indicators, unsaved-edits close confirmation, syntax highlighting (Python, JS, TS, Java, C, C++, HTML, CSS, JSON, Markdown), custom dark (`#101216`) and light themes, font size, tab size, minimap toggle, word wrap toggle, formatting, and real-time Monaco marker diagnostics
-  - **Resizable Bottom Panel**:
-    - **Terminal**: Clearly labeled *Local Mock Shell* for Phase 1 UI testing (`help`, `ls`, `tree`, `cat`, `pwd`, `whoami`, `date`, `echo`, `clear`) with multi-tab support ready for Phase 4 `xterm.js` + `node-pty`
-    - **Output**: Timestamped IDE and persistence log stream
-    - **Problems**: Live Monaco validation markers with click-to-jump
-  - **Keyboard Shortcuts**:
-    - `Ctrl + S` — Save active file
-    - `Ctrl + P` — Quick open file
-    - `Ctrl + Shift + P` — Command palette
-    - `Ctrl + B` — Toggle primary sidebar
-    - ``Ctrl + ` `` — Toggle bottom panel
-- **Storage Abstraction (`src/services/storage/`)**:
-  - `StorageAdapter` interface implemented by `LocalStorageAdapter` in Phase 1, with `ApiStorageAdapter` and `src/services/api/types.ts` prepared for Phases 2–8.
+  - Monaco Editor with multi-file tabs, unsaved-edits guard, debounced autosave (1.2s) + manual `Ctrl+S` save, live saving/synced status indicators, themes, minimap/word-wrap toggles, and real-time diagnostics (`Problems` panel).
+  - Nested File Explorer synced with MongoDB (`createFile`, `createFolder`, `renameEntry` with cascading paths, `deleteEntry`, right-click context menu).
+  - Workspace-wide Search (`Ctrl+P` quick open, `Ctrl+Shift+P` command palette, `Ctrl+B` sidebar toggle, ``Ctrl+` `` panel toggle).
+  - Clearly labeled Phase 1–2 `Local Mock Shell` preview in the Bottom Panel pending Phases 3–4 Docker + `node-pty`.
+
+### Backend (`backend/` — Express + TypeScript + Mongoose)
+- **MongoDB Models (`backend/src/models/`)**:
+  - `User` (`name`, `email` unique, `passwordHash`, `role`, `refreshTokenHash`, timestamps)
+  - `Workspace` (`ownerId`, `name`, `description`, `language`, `template`, `status`, `lastOpenedAt`, timestamps)
+  - `File` (`workspaceId`, `parentId`, `filename`, `path`, `parentPath`, `type`, `content`, `language`, timestamps)
+  - `ExecutionEnvironment` (`workspaceId`, `language`, `environmentTemplate`, `status` — Phase 3 Docker preparation)
+- **Security Middleware**: Helmet headers, CORS (`credentials: true`), rate limiting on `/api/auth/*` and `/api/*`, bcrypt password hashing (12 rounds), short-lived JWT access tokens + HTTP-only rotated refresh cookies, Zod request validation, path traversal prevention, and strict workspace ownership verification (`ownerId === req.user._id`).
+- **Socket.IO Foundation**: Authenticated Socket.IO handshake ready for Phases 4 & 6.
 
 ---
 
@@ -36,29 +33,49 @@ A browser-based, VS Code-inspired Cloud IDE built with React, TypeScript, Vite, 
 
 ```text
 distributed-cloud-ide/
-├── src/
+├── backend/
+│   ├── src/
+│   │   ├── config/          # env.ts (Zod env validation), database.ts (Mongoose)
+│   │   ├── controllers/     # authController, workspaceController, fileController
+│   │   ├── middleware/      # auth, workspaceOwnership, validate, rateLimiter, errorHandler
+│   │   ├── models/          # User, Workspace, File, ExecutionEnvironment
+│   │   ├── routes/          # authRoutes, workspaceRoutes, fileRoutes, healthRoutes
+│   │   ├── services/        # dockerPrepService (Phase 3 preparation)
+│   │   ├── types/           # express.d.ts
+│   │   ├── utils/           # apiResponse, AppError, jwt, pathSecurity
+│   │   ├── validators/      # authValidators, workspaceValidators, fileValidators
+│   │   ├── app.ts
+│   │   └── server.ts
+│   ├── tests/
+│   │   └── api.test.ts      # Vitest + Supertest + MongoMemoryServer integration tests
+│   ├── .env.example
+│   ├── package.json
+│   └── tsconfig.json
+├── src/                     # React + TypeScript + Vite Frontend
 │   ├── components/
-│   │   ├── common/         # Modal, SettingsModal, QuickOpenModal, CommandPalette
-│   │   ├── dashboard/      # CreateWorkspaceModal, WorkspaceCard
-│   │   ├── editor/         # CodeEditor (Monaco), EditorTabs
-│   │   ├── explorer/       # FileExplorer, FileTreeItem, FileIcon, SearchPanel, PlaceholderPanel
-│   │   ├── layout/         # TopNavBar, ActivityBar, StatusBar
-│   │   └── terminal/       # BottomPanel, LocalTerminal, OutputPanel, ProblemsPanel
-│   ├── hooks/              # useKeyboardShortcuts
-│   ├── pages/              # Dashboard, Workspace
+│   │   ├── auth/            # ProtectedRoute
+│   │   ├── common/          # Modal, SettingsModal, QuickOpenModal, CommandPalette
+│   │   ├── dashboard/       # CreateWorkspaceModal, WorkspaceCard
+│   │   ├── editor/          # CodeEditor (Monaco + autosave), EditorTabs
+│   │   ├── explorer/        # FileExplorer, FileTreeItem, FileIcon, SearchPanel, PlaceholderPanel
+│   │   ├── layout/          # TopNavBar, ActivityBar, StatusBar
+│   │   └── terminal/        # BottomPanel, LocalTerminal, OutputPanel, ProblemsPanel
+│   ├── hooks/               # useKeyboardShortcuts
+│   ├── pages/               # Dashboard, Workspace, Login, Register, Profile
 │   ├── services/
-│   │   ├── api/            # Phase 2–8 TypeScript service contracts
-│   │   └── storage/        # StorageAdapter, LocalStorageAdapter, ApiStorageAdapter
-│   ├── store/              # useWorkspaceStore, useThemeStore (Zustand)
-│   ├── styles/             # monacoThemes
-│   ├── types/              # ide.ts domain models
-│   ├── utils/              # fileTree, language, templates
+│   │   ├── api/             # client.ts (Axios), types.ts
+│   │   └── storage/         # StorageAdapter, ApiStorageAdapter, LocalStorageAdapter
+│   ├── store/               # useAuthStore, useWorkspaceStore, useThemeStore
+│   ├── styles/              # monacoThemes
+│   ├── types/               # ide.ts
+│   ├── utils/               # fileTree, language, templates
 │   ├── App.tsx
 │   ├── index.css
 │   └── main.tsx
 ├── tests/
-│   └── ideStore.test.ts    # Vitest unit tests for store, tree, and persistence
-├── index.html
+│   └── ideStore.test.ts
+├── docker-compose.yml
+├── .env.example
 ├── package.json
 ├── tsconfig.json
 └── vite.config.ts
@@ -66,39 +83,78 @@ distributed-cloud-ide/
 
 ---
 
+## API Endpoint Summary
+
+### Health
+- `GET /api/health` — Backend and MongoDB connection status
+
+### Authentication (`/api/auth`)
+- `POST /api/auth/register` — Register account (`name`, `email`, `password`, `confirmPassword`)
+- `POST /api/auth/login` — Login and set HTTP-only refresh cookie
+- `POST /api/auth/refresh` — Rotate refresh cookie and issue new short-lived access token
+- `POST /api/auth/logout` — Revoke refresh token hash and clear cookie
+- `GET /api/auth/me` — Get authenticated user profile (protected)
+- `PUT /api/auth/profile` — Update name/email (protected)
+- `PUT /api/auth/change-password` — Change password with current password check (protected)
+
+### Workspaces (`/api/workspaces` — all protected & ownership-checked)
+- `POST /api/workspaces` — Create workspace + starter template files + `ExecutionEnvironment`
+- `GET /api/workspaces` — List owned workspaces (`search`, `language`, `sortBy`, `sortOrder`, `page`, `limit`)
+- `GET /api/workspaces/:id` — Get workspace details
+- `PUT /api/workspaces/:id` — Update workspace name, description, language, or status
+- `DELETE /api/workspaces/:id` — Delete workspace, files, and execution environment
+
+### Files & Folders (all protected & ownership-checked)
+- `POST /api/workspaces/:id/files` — Create file
+- `POST /api/workspaces/:id/folders` — Create folder
+- `GET /api/workspaces/:id/files` — List flat `files[]` and nested `tree[]`
+- `GET /api/files/:fileId` — Get file details and content
+- `PUT /api/files/:fileId` — Save file content
+- `PATCH /api/files/:fileId/rename` — Rename file or folder (cascades nested paths)
+- `DELETE /api/files/:fileId` — Delete file or folder and all descendants
+
+---
+
 ## Local Setup (Windows PowerShell in VS Code)
 
-Ensure **Node.js 20+** and **npm** are installed, then run the following commands in the VS Code PowerShell terminal from the project root:
+### Prerequisites
+- Node.js 20+
+- Local MongoDB Community Server (or Docker / MongoDB Atlas URI)
 
+### 1. Start MongoDB (optional via Docker Compose)
 ```powershell
-# 1. Install dependencies
-npm install
+docker compose up -d mongodb
+```
 
-# 2. Start the development server at http://localhost:3000
+### 2. Configure & Start Backend (`http://localhost:4000`)
+```powershell
+cd backend
+Copy-Item .env.example .env
+npm install
 npm run dev
 ```
+
+### 3. Configure & Start Frontend (`http://localhost:3000`)
+Open a second PowerShell terminal in the project root:
+```powershell
+npm install
+npm run dev
+```
+
+Vite automatically proxies `/api` and `/socket.io` requests to `http://localhost:4000`.
 
 ### Verification Commands (Windows PowerShell)
 
 ```powershell
-# TypeScript type checking
+# Backend checks & integration tests (uses in-memory MongoDB)
+cd backend
 npm run typecheck
-
-# Run automated unit tests
 npm test
+npm run build
 
-# Create production bundle
+# Frontend checks & unit tests (from project root)
+cd ..
+npm run typecheck
+npm test
 npm run build
 ```
-
----
-
-## Roadmap for Upcoming Phases
-
-- **Phase 2**: Express.js + TypeScript REST API, MongoDB + Mongoose models, JWT + bcrypt authentication, `ApiStorageAdapter` activation
-- **Phase 3**: Docker Engine API container lifecycle manager with seccomp, non-root execution, CPU/memory/PID limits, and network isolation
-- **Phase 4**: `xterm.js` + `node-pty` + Socket.IO interactive container terminal streaming
-- **Phase 5**: Sandboxed multi-language code execution engine (Python, Node.js, Java, C, C++)
-- **Phase 6**: Language Server Protocol (LSP) proxy + Yjs real-time collaborative editing
-- **Phase 7**: Browser WebAssembly execution fallback
-- **Phase 8**: Nginx reverse proxy, Docker Compose, monitoring dashboard, and production deployment

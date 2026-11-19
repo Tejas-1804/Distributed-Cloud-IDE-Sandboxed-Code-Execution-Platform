@@ -70,7 +70,7 @@ export function CreateWorkspaceModal({ open, onClose, onCreated }: CreateWorkspa
       open={open}
       onClose={onClose}
       title="Create New Workspace"
-      subtitle="Configure language runtime and starter files. Stored locally in Phase 1."
+      subtitle="Configure language runtime and starter files. Persisted in MongoDB."
       maxWidthClass="max-w-lg"
     >
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">

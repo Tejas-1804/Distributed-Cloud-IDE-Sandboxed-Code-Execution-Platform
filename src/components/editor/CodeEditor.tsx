@@ -1,7 +1,7 @@
-import Editor, { type Monaco, type OnMount } from '@monaco-editor/react';
+import Editor, { type Monaco, type OnMount, type OnValidate } from '@monaco-editor/react';
 import { Code2, FolderOpen } from 'lucide-react';
-import type * as MonacoTypes from 'monaco-editor';
 import { useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { useThemeStore } from '../../store/useThemeStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { registerMonacoThemes } from '../../styles/monacoThemes';
@@ -24,6 +24,7 @@ export function CodeEditor({
     drafts,
     pendingJump,
     updateDraft,
+    saveFile,
     setCursorPosition,
     setFileProblems,
     setSidebarOpen,
@@ -31,10 +32,24 @@ export function CodeEditor({
   } = useWorkspaceStore();
 
   const { theme, editorSettings } = useThemeStore();
-  const editorRef = useRef<MonacoTypes.editor.IStandaloneCodeEditor | null>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 
   const activeFile = files.find((f) => f.id === activeFileId && f.type === 'file') ?? null;
-  const activeValue = activeFile ? (drafts[activeFile.id] ?? activeFile.content) : '';
+  const activeDraft = activeFile ? drafts[activeFile.id] : undefined;
+  const activeValue = activeFile ? (activeDraft ?? activeFile.content) : '';
+
+  // Debounced autosave (1200ms after editing stops)
+  useEffect(() => {
+    if (!activeFile || activeDraft === undefined) return;
+    const targetFileId = activeFile.id;
+    const timer = window.setTimeout(() => {
+      void saveFile(targetFileId).catch((err) => {
+        toast.error(err instanceof Error ? err.message : 'Autosave failed.');
+      });
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [activeFile?.id, activeDraft, saveFile]);
 
   const handleBeforeMount = (monaco: Monaco) => {
     registerMonacoThemes(monaco);
@@ -43,7 +58,7 @@ export function CodeEditor({
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor;
 
-    editor.onDidChangeCursorPosition((e) => {
+    editor.onDidChangeCursorPosition((e: { position: { lineNumber: number; column: number } }) => {
       setCursorPosition({
         lineNumber: e.position.lineNumber,
         column: e.position.column,
@@ -73,7 +88,7 @@ export function CodeEditor({
     editor.focus();
   }, [pendingJump, activeFileId]);
 
-  const handleValidate = (markers: MonacoTypes.editor.IMarker[]) => {
+  const handleValidate: OnValidate = (markers) => {
     if (!activeFile) return;
 
     const problems: ProblemItem[] = markers

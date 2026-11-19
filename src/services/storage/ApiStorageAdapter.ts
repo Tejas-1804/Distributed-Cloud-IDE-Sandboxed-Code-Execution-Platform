@@ -1,85 +1,185 @@
-import type { Workspace, WorkspaceFile } from '../../types/ide';
-import type { StorageAdapter } from './StorageAdapter';
+import type { StarterTemplate, SupportedLanguage, Workspace, WorkspaceFile } from '../../types/ide';
+import { apiClient, extractApiError, type ApiSuccessResponse } from '../api/client';
+import type {
+  StorageAdapter,
+  WorkspaceListResult,
+  WorkspaceQueryParams,
+} from './StorageAdapter';
+
+interface BackendFileDTO {
+  id: string;
+  workspaceId: string;
+  parentId?: string | null;
+  name?: string;
+  filename?: string;
+  path: string;
+  parentPath: string;
+  type: 'file' | 'folder';
+  content: string;
+  language: WorkspaceFile['language'];
+  updatedAt: string;
+}
+
+function normalizeFileDTO(dto: BackendFileDTO): WorkspaceFile {
+  return {
+    id: dto.id,
+    workspaceId: dto.workspaceId,
+    name: dto.name ?? dto.filename ?? dto.path.split('/').pop() ?? dto.path,
+    path: dto.path,
+    parentPath: dto.parentPath ?? '',
+    type: dto.type,
+    content: dto.content ?? '',
+    language: dto.language,
+    updatedAt: dto.updatedAt,
+  };
+}
 
 /**
- * Phase 2 Integration Target: REST + MongoDB Storage Adapter.
- *
- * When the Express + MongoDB backend is implemented in Phase 2, instantiate
- * `new ApiStorageAdapter('/api', () => authStore.getState().token)` and swap it
- * into `useWorkspaceStore.ts`.
+ * MongoDB-backed REST StorageAdapter communicating via the authenticated Axios client.
  */
 export class ApiStorageAdapter implements StorageAdapter {
-  private readonly baseUrl: string;
-  private readonly getToken: () => string | null;
-
-  constructor(baseUrl = '/api', getToken: () => string | null = () => null) {
-    this.baseUrl = baseUrl;
-    this.getToken = getToken;
-  }
-
-  private getHeaders(): HeadersInit {
-    const token = this.getToken();
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }
-
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers: {
-        ...this.getHeaders(),
-        ...init?.headers,
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`API request failed (${res.status}): ${res.statusText}`);
+  async listWorkspaces(query?: WorkspaceQueryParams): Promise<WorkspaceListResult> {
+    try {
+      const res = await apiClient.get<ApiSuccessResponse<WorkspaceListResult>>('/workspaces', {
+        params: query,
+      });
+      return res.data.data;
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to load workspaces'));
     }
-    return (await res.json()) as T;
-  }
-
-  async listWorkspaces(): Promise<Workspace[]> {
-    return this.request<Workspace[]>('/workspaces');
   }
 
   async getWorkspace(id: string): Promise<Workspace | null> {
-    return this.request<Workspace | null>(`/workspaces/${encodeURIComponent(id)}`);
+    try {
+      const res = await apiClient.get<ApiSuccessResponse<{ workspace: Workspace }>>(
+        `/workspaces/${encodeURIComponent(id)}`,
+      );
+      return res.data.data.workspace;
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to load workspace'));
+    }
   }
 
-  async saveWorkspace(workspace: Workspace): Promise<Workspace> {
-    return this.request<Workspace>(`/workspaces/${encodeURIComponent(workspace.id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(workspace),
-    });
+  async createWorkspace(params: {
+    name: string;
+    description?: string;
+    language: SupportedLanguage;
+    template: StarterTemplate;
+  }): Promise<Workspace> {
+    try {
+      const res = await apiClient.post<ApiSuccessResponse<{ workspace: Workspace }>>(
+        '/workspaces',
+        params,
+      );
+      return res.data.data.workspace;
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to create workspace'));
+    }
+  }
+
+  async updateWorkspace(
+    id: string,
+    patch: Partial<Pick<Workspace, 'name' | 'description' | 'language'>>,
+  ): Promise<Workspace> {
+    try {
+      const res = await apiClient.put<ApiSuccessResponse<{ workspace: Workspace }>>(
+        `/workspaces/${encodeURIComponent(id)}`,
+        patch,
+      );
+      return res.data.data.workspace;
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to update workspace'));
+    }
   }
 
   async deleteWorkspace(id: string): Promise<void> {
-    await this.request<void>(`/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    try {
+      await apiClient.delete(`/workspaces/${encodeURIComponent(id)}`);
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to delete workspace'));
+    }
   }
 
   async listFiles(workspaceId: string): Promise<WorkspaceFile[]> {
-    return this.request<WorkspaceFile[]>(`/workspaces/${encodeURIComponent(workspaceId)}/files`);
+    try {
+      const res = await apiClient.get<ApiSuccessResponse<{ files: BackendFileDTO[] }>>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/files`,
+      );
+      return res.data.data.files.map(normalizeFileDTO);
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to load workspace files'));
+    }
   }
 
-  async saveFile(file: WorkspaceFile): Promise<WorkspaceFile> {
-    return this.request<WorkspaceFile>(
-      `/workspaces/${encodeURIComponent(file.workspaceId)}/files/${encodeURIComponent(file.id)}`,
-      {
-        method: 'PUT',
-        body: JSON.stringify(file),
-      },
-    );
+  async createFile(
+    workspaceId: string,
+    params: { filename: string; parentPath?: string; content?: string },
+  ): Promise<WorkspaceFile> {
+    try {
+      const res = await apiClient.post<ApiSuccessResponse<{ file: BackendFileDTO }>>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/files`,
+        params,
+      );
+      return normalizeFileDTO(res.data.data.file);
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to create file'));
+    }
   }
 
-  async saveFiles(files: WorkspaceFile[]): Promise<WorkspaceFile[]> {
-    return Promise.all(files.map((file) => this.saveFile(file)));
+  async createFolder(
+    workspaceId: string,
+    params: { filename: string; parentPath?: string },
+  ): Promise<WorkspaceFile> {
+    try {
+      const res = await apiClient.post<ApiSuccessResponse<{ file: BackendFileDTO }>>(
+        `/workspaces/${encodeURIComponent(workspaceId)}/folders`,
+        params,
+      );
+      return normalizeFileDTO(res.data.data.file);
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to create folder'));
+    }
   }
 
-  async deleteFilesByPrefix(workspaceId: string, pathPrefix: string): Promise<void> {
-    await this.request<void>(
-      `/workspaces/${encodeURIComponent(workspaceId)}/files?prefix=${encodeURIComponent(pathPrefix)}`,
-      { method: 'DELETE' },
-    );
+  async updateFileContent(fileId: string, content: string): Promise<WorkspaceFile> {
+    try {
+      const res = await apiClient.put<ApiSuccessResponse<{ file: BackendFileDTO }>>(
+        `/files/${encodeURIComponent(fileId)}`,
+        { content },
+      );
+      return normalizeFileDTO(res.data.data.file);
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to save file'));
+    }
+  }
+
+  async renameEntry(
+    fileId: string,
+    filename: string,
+  ): Promise<{ file: WorkspaceFile; updated: WorkspaceFile[] }> {
+    try {
+      const res = await apiClient.patch<
+        ApiSuccessResponse<{ file: BackendFileDTO; updated: BackendFileDTO[] }>
+      >(`/files/${encodeURIComponent(fileId)}/rename`, { filename });
+      return {
+        file: normalizeFileDTO(res.data.data.file),
+        updated: (res.data.data.updated ?? []).map(normalizeFileDTO),
+      };
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to rename item'));
+    }
+  }
+
+  async deleteEntry(fileId: string): Promise<{ deletedIds: string[] }> {
+    try {
+      const res = await apiClient.delete<ApiSuccessResponse<{ deletedIds: string[] }>>(
+        `/files/${encodeURIComponent(fileId)}`,
+      );
+      return res.data.data;
+    } catch (err) {
+      throw new Error(extractApiError(err, 'Failed to delete item'));
+    }
   }
 }
+
+export const apiStorageAdapter = new ApiStorageAdapter();

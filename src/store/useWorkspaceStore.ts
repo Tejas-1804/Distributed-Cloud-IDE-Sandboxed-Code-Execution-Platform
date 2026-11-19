@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { localStorageAdapter } from '../services/storage/LocalStorageAdapter';
-import type { StorageAdapter } from '../services/storage/StorageAdapter';
+import { apiStorageAdapter } from '../services/storage/ApiStorageAdapter';
+import type { StorageAdapter, WorkspaceQueryParams } from '../services/storage/StorageAdapter';
 import type {
   ActivityView,
   BottomPanelTab,
@@ -15,11 +15,10 @@ import type {
   Workspace,
   WorkspaceFile,
 } from '../types/ide';
-import { getParentPath, joinPath, normalizePath, validateEntryName } from '../utils/fileTree';
-import { detectMonacoLanguage } from '../utils/language';
-import { buildTemplateFiles, createDemoWorkspace } from '../utils/templates';
+import { normalizePath, validateEntryName } from '../utils/fileTree';
+import { createDemoWorkspace } from '../utils/templates';
 
-let storageAdapter: StorageAdapter = localStorageAdapter;
+let storageAdapter: StorageAdapter = apiStorageAdapter;
 
 export function setStorageAdapter(adapter: StorageAdapter): void {
   storageAdapter = adapter;
@@ -51,12 +50,12 @@ function createInitialTerminalSession(workspaceName: string): TerminalSession {
       {
         id: makeId('line'),
         type: 'info',
-        text: `Local Mock Shell (Phase 1 UI Preview) — ${workspaceName}`,
+        text: `Local Mock Shell (Preview) — ${workspaceName}`,
       },
       {
         id: makeId('line'),
         type: 'info',
-        text: 'Docker + node-pty streaming connects in Phases 3–4. Type "help" for available preview commands.',
+        text: 'Docker + node-pty streaming connects in Phases 3–4. Type "help" for local workspace commands.',
       },
     ],
   };
@@ -71,6 +70,7 @@ interface PendingEditorJump {
 
 interface WorkspaceState {
   workspaces: Workspace[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
   initialized: boolean;
   loading: boolean;
   error: string | null;
@@ -80,6 +80,8 @@ interface WorkspaceState {
   openTabIds: string[];
   activeFileId: string | null;
   drafts: Record<string, string>;
+  savingFileIds: Record<string, boolean>;
+  saveError: string | null;
   expandedFolders: Record<string, boolean>;
   cursorPosition: CursorPosition;
   pendingJump: PendingEditorJump | null;
@@ -95,6 +97,7 @@ interface WorkspaceState {
   activeTerminalId: string | null;
 
   // Actions
+  fetchWorkspaces: (query?: WorkspaceQueryParams) => Promise<void>;
   initializeWorkspaces: () => Promise<void>;
   restoreDemoWorkspace: () => Promise<Workspace>;
   createWorkspace: (params: {
@@ -142,7 +145,7 @@ interface WorkspaceState {
   ) => void;
   clearOutput: () => void;
 
-  // Mock Terminal (Phase 1 UI)
+  // Mock Terminal (Preview until Phase 4)
   createTerminalSession: () => void;
   closeTerminalSession: (sessionId: string) => void;
   setActiveTerminal: (sessionId: string) => void;
@@ -151,6 +154,7 @@ interface WorkspaceState {
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   workspaces: [],
+  pagination: { page: 1, limit: 24, total: 0, totalPages: 1 },
   initialized: false,
   loading: false,
   error: null,
@@ -160,6 +164,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   openTabIds: [],
   activeFileId: null,
   drafts: {},
+  savingFileIds: {},
+  saveError: null,
   expandedFolders: {},
   cursorPosition: { lineNumber: 1, column: 1 },
   pendingJump: null,
@@ -174,26 +180,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   terminalSessions: [],
   activeTerminalId: null,
 
-  initializeWorkspaces: async () => {
-    if (get().initialized) return;
+  fetchWorkspaces: async (query) => {
     set({ loading: true, error: null });
-
     try {
-      let workspaces = await storageAdapter.listWorkspaces();
-      const alreadySeeded =
-        storageAdapter === localStorageAdapter ? localStorageAdapter.isSeeded() : workspaces.length > 0;
-
-      if (workspaces.length === 0 && !alreadySeeded) {
-        const { workspace, files } = createDemoWorkspace();
-        await storageAdapter.saveWorkspace(workspace);
-        await storageAdapter.saveFiles(files);
-        if (storageAdapter === localStorageAdapter) {
-          localStorageAdapter.markSeeded();
-        }
-        workspaces = [workspace];
-      }
-
-      set({ workspaces, initialized: true, loading: false });
+      const result = await storageAdapter.listWorkspaces(query);
+      set({
+        workspaces: result.workspaces,
+        pagination: result.pagination,
+        initialized: true,
+        loading: false,
+      });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to load workspaces.',
@@ -202,24 +198,52 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
+  initializeWorkspaces: async () => {
+    await get().fetchWorkspaces();
+  },
+
   restoreDemoWorkspace: async () => {
-    const { workspace, files } = createDemoWorkspace();
-    const existing = get().workspaces.find((w) => w.id === workspace.id);
-    const targetWorkspace = existing
-      ? { ...workspace, id: makeId('ws'), name: `CloudIDE-Demo-${Date.now().toString().slice(-4)}` }
-      : workspace;
+    const demo = createDemoWorkspace();
+    const existingNames = new Set(get().workspaces.map((w) => w.name));
+    const demoName = existingNames.has('CloudIDE-Demo')
+      ? `CloudIDE-Demo-${Date.now().toString().slice(-4)}`
+      : 'CloudIDE-Demo';
 
-    const targetFiles = files.map((file) => ({
-      ...file,
-      id: makeId(file.type === 'folder' ? 'dir' : 'file'),
-      workspaceId: targetWorkspace.id,
-    }));
+    const workspace = await storageAdapter.createWorkspace({
+      name: demoName,
+      description: demo.workspace.description,
+      language: 'python',
+      template: 'empty',
+    });
 
-    await storageAdapter.saveWorkspace(targetWorkspace);
-    await storageAdapter.saveFiles(targetFiles);
-    const workspaces = await storageAdapter.listWorkspaces();
-    set({ workspaces });
-    return targetWorkspace;
+    // Populate the multi-language CloudIDE-Demo structure on the backend
+    const folders = demo.files.filter((f) => f.type === 'folder');
+    const regularFiles = demo.files.filter((f) => f.type === 'file' && f.path !== 'README.md');
+    const readme = demo.files.find((f) => f.path === 'README.md');
+
+    for (const folder of folders) {
+      await storageAdapter.createFolder(workspace.id, {
+        filename: folder.name,
+        parentPath: folder.parentPath,
+      });
+    }
+    for (const file of regularFiles) {
+      await storageAdapter.createFile(workspace.id, {
+        filename: file.name,
+        parentPath: file.parentPath,
+        content: file.content,
+      });
+    }
+    if (readme) {
+      const createdFiles = await storageAdapter.listFiles(workspace.id);
+      const existingReadme = createdFiles.find((f) => f.path === 'README.md');
+      if (existingReadme) {
+        await storageAdapter.updateFileContent(existingReadme.id, readme.content);
+      }
+    }
+
+    await get().fetchWorkspaces();
+    return workspace;
   },
 
   createWorkspace: async ({ name, language, template, description }) => {
@@ -228,25 +252,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       throw new Error('Workspace name is required.');
     }
 
-    const now = new Date().toISOString();
-    const id = makeId('ws');
-    const workspace: Workspace = {
-      id,
+    const workspace = await storageAdapter.createWorkspace({
       name: trimmedName,
-      description:
-        description?.trim() || `${language.toUpperCase()} workspace (${template} template)`,
+      description,
       language,
       template,
-      createdAt: now,
-      updatedAt: now,
-      lastOpenedAt: now,
-    };
-
-    const files = buildTemplateFiles(id, trimmedName, language, template);
-    await storageAdapter.saveWorkspace(workspace);
-    await storageAdapter.saveFiles(files);
-    const workspaces = await storageAdapter.listWorkspaces();
-    set({ workspaces });
+    });
+    await get().fetchWorkspaces();
     return workspace;
   },
 
@@ -256,30 +268,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       throw new Error('Workspace name cannot be empty.');
     }
 
-    const target = await storageAdapter.getWorkspace(id);
-    if (!target) {
-      throw new Error('Workspace not found.');
-    }
-
-    const updated: Workspace = {
-      ...target,
-      name: trimmed,
-      updatedAt: new Date().toISOString(),
-    };
-    await storageAdapter.saveWorkspace(updated);
-    const workspaces = await storageAdapter.listWorkspaces();
-
+    const updated = await storageAdapter.updateWorkspace(id, { name: trimmed });
     set((state) => ({
-      workspaces,
+      workspaces: state.workspaces.map((w) => (w.id === id ? updated : w)),
       activeWorkspace: state.activeWorkspace?.id === id ? updated : state.activeWorkspace,
     }));
   },
 
   deleteWorkspace: async (id) => {
     await storageAdapter.deleteWorkspace(id);
-    const workspaces = await storageAdapter.listWorkspaces();
     set((state) => ({
-      workspaces,
+      workspaces: state.workspaces.filter((w) => w.id !== id),
       activeWorkspace: state.activeWorkspace?.id === id ? null : state.activeWorkspace,
     }));
   },
@@ -287,7 +286,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   openWorkspace: async (id) => {
     set({ loading: true, error: null });
     try {
-      await get().initializeWorkspaces();
       const workspace = await storageAdapter.getWorkspace(id);
       if (!workspace) {
         set({ loading: false, error: 'Workspace not found.' });
@@ -295,14 +293,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
 
       const files = await storageAdapter.listFiles(id);
-      const updatedWorkspace: Workspace = {
-        ...workspace,
-        lastOpenedAt: new Date().toISOString(),
-      };
-      await storageAdapter.saveWorkspace(updatedWorkspace);
-      const workspaces = await storageAdapter.listWorkspaces();
 
-      // Expand top-level folders by default
       const expandedFolders: Record<string, boolean> = {};
       for (const file of files) {
         if (file.type === 'folder' && !file.parentPath) {
@@ -310,22 +301,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         }
       }
 
-      // Open entry file automatically
-      const preferredOrder = ['src/main.py', 'src/index.js', 'src/Main.java', 'src/main.c', 'src/main.cpp', 'README.md'];
+      const preferredOrder = [
+        'src/main.py',
+        'src/index.js',
+        'src/Main.java',
+        'src/main.c',
+        'src/main.cpp',
+        'public/index.html',
+        'README.md',
+      ];
       const defaultFile =
         preferredOrder
           .map((p) => files.find((f) => f.type === 'file' && f.path === p))
-          .find(Boolean) ?? files.find((f) => f.type === 'file') ?? null;
+          .find(Boolean) ??
+        files.find((f) => f.type === 'file') ??
+        null;
 
-      const termSession = createInitialTerminalSession(updatedWorkspace.name);
+      const termSession = createInitialTerminalSession(workspace.name);
 
       set({
-        workspaces,
-        activeWorkspace: updatedWorkspace,
+        activeWorkspace: workspace,
         files,
         openTabIds: defaultFile ? [defaultFile.id] : [],
         activeFileId: defaultFile?.id ?? null,
         drafts: {},
+        savingFileIds: {},
+        saveError: null,
         expandedFolders,
         cursorPosition: { lineNumber: 1, column: 1 },
         problemsByFile: {},
@@ -338,7 +339,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             timestamp: formatTime(),
             source: 'IDE',
             level: 'info',
-            message: `Opened workspace "${updatedWorkspace.name}" (${files.filter((f) => f.type === 'file').length} files loaded from LocalStorage).`,
+            message: `Opened workspace "${workspace.name}" (${files.filter((f) => f.type === 'file').length} files synced from MongoDB).`,
           },
         ],
       });
@@ -355,11 +356,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   closeWorkspace: () => {
     set({
+      workspaces: [],
+      initialized: false,
       activeWorkspace: null,
       files: [],
       openTabIds: [],
       activeFileId: null,
       drafts: {},
+      savingFileIds: {},
+      saveError: null,
       expandedFolders: {},
       problemsByFile: {},
       terminalSessions: [],
@@ -368,7 +373,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   createEntry: async (name, type, parentPath = '') => {
-    const { activeWorkspace, files, expandedFolders } = get();
+    const { activeWorkspace, expandedFolders } = get();
     if (!activeWorkspace) {
       throw new Error('No active workspace.');
     }
@@ -380,46 +385,31 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     const cleanName = name.trim();
     const cleanParent = normalizePath(parentPath);
-    const fullPath = joinPath(cleanParent, cleanName);
 
-    const duplicate = files.some((f) => f.path.toLowerCase() === fullPath.toLowerCase());
-    if (duplicate) {
-      throw new Error(`An item named "${cleanName}" already exists in this folder.`);
-    }
-
-    const now = new Date().toISOString();
-    const entry: WorkspaceFile = {
-      id: makeId(type === 'folder' ? 'dir' : 'file'),
-      workspaceId: activeWorkspace.id,
-      name: cleanName,
-      path: fullPath,
-      parentPath: cleanParent,
-      type,
-      content: '',
-      language: type === 'folder' ? 'plaintext' : detectMonacoLanguage(cleanName),
-      updatedAt: now,
-    };
-
-    await storageAdapter.saveFile(entry);
-    const updatedWorkspace: Workspace = { ...activeWorkspace, updatedAt: now };
-    await storageAdapter.saveWorkspace(updatedWorkspace);
-    const workspaces = await storageAdapter.listWorkspaces();
+    const entry =
+      type === 'folder'
+        ? await storageAdapter.createFolder(activeWorkspace.id, {
+            filename: cleanName,
+            parentPath: cleanParent,
+          })
+        : await storageAdapter.createFile(activeWorkspace.id, {
+            filename: cleanName,
+            parentPath: cleanParent,
+            content: '',
+          });
 
     const nextExpanded = { ...expandedFolders };
     if (cleanParent) nextExpanded[cleanParent] = true;
-    if (type === 'folder') nextExpanded[fullPath] = true;
+    if (type === 'folder') nextExpanded[entry.path] = true;
 
     set((state) => ({
-      workspaces,
-      activeWorkspace: updatedWorkspace,
       files: [...state.files, entry],
       expandedFolders: nextExpanded,
-      openTabIds:
-        type === 'file' ? [...state.openTabIds, entry.id] : state.openTabIds,
+      openTabIds: type === 'file' ? [...state.openTabIds, entry.id] : state.openTabIds,
       activeFileId: type === 'file' ? entry.id : state.activeFileId,
     }));
 
-    get().appendOutput('Storage', 'success', `Created ${type}: ${fullPath}`);
+    get().appendOutput('Storage', 'success', `Created ${type}: ${entry.path}`);
     return entry;
   },
 
@@ -442,67 +432,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const cleanName = newName.trim();
     if (cleanName === target.name) return;
 
-    const newPath = joinPath(target.parentPath, cleanName);
-    const duplicate = files.some(
-      (f) => f.id !== fileId && f.path.toLowerCase() === newPath.toLowerCase(),
-    );
-    if (duplicate) {
-      throw new Error(`An item named "${cleanName}" already exists here.`);
+    const { file: renamedTarget, updated } = await storageAdapter.renameEntry(fileId, cleanName);
+    const updatedMap = new Map(updated.map((u) => [u.id, u]));
+    if (!updatedMap.has(renamedTarget.id)) {
+      updatedMap.set(renamedTarget.id, renamedTarget);
     }
-
-    const now = new Date().toISOString();
-    const oldPrefix = `${target.path}/`;
-    const newPrefix = `${newPath}/`;
-
-    const updatedFiles: WorkspaceFile[] = [];
-    const nextFiles = files.map((file) => {
-      if (file.id === target.id) {
-        const updated: WorkspaceFile = {
-          ...file,
-          name: cleanName,
-          path: newPath,
-          language: file.type === 'folder' ? 'plaintext' : detectMonacoLanguage(cleanName),
-          updatedAt: now,
-        };
-        updatedFiles.push(updated);
-        return updated;
-      }
-
-      if (target.type === 'folder' && file.path.startsWith(oldPrefix)) {
-        const suffix = file.path.slice(oldPrefix.length);
-        const childPath = `${newPrefix}${suffix}`;
-        const updated: WorkspaceFile = {
-          ...file,
-          path: childPath,
-          parentPath: getParentPath(childPath),
-          updatedAt: now,
-        };
-        updatedFiles.push(updated);
-        return updated;
-      }
-
-      return file;
-    });
-
-    await storageAdapter.saveFiles(updatedFiles);
-    const updatedWorkspace: Workspace = { ...activeWorkspace, updatedAt: now };
-    await storageAdapter.saveWorkspace(updatedWorkspace);
-    const workspaces = await storageAdapter.listWorkspaces();
 
     const nextExpanded = { ...expandedFolders };
     if (target.type === 'folder' && nextExpanded[target.path]) {
       delete nextExpanded[target.path];
-      nextExpanded[newPath] = true;
+      nextExpanded[renamedTarget.path] = true;
     }
 
-    set({
-      workspaces,
-      activeWorkspace: updatedWorkspace,
-      files: nextFiles,
+    set((state) => ({
+      files: state.files.map((f) => updatedMap.get(f.id) ?? f),
       expandedFolders: nextExpanded,
-    });
+    }));
 
-    get().appendOutput('Storage', 'info', `Renamed "${target.path}" → "${newPath}"`);
+    get().appendOutput('Storage', 'info', `Renamed "${target.path}" → "${renamedTarget.path}"`);
   },
 
   deleteEntry: async (fileId) => {
@@ -512,38 +459,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const target = files.find((f) => f.id === fileId);
     if (!target) return;
 
-    const removedIds = new Set(
-      files
-        .filter((f) => f.path === target.path || f.path.startsWith(`${target.path}/`))
-        .map((f) => f.id),
-    );
+    const { deletedIds } = await storageAdapter.deleteEntry(fileId);
+    const removedSet = new Set(deletedIds.length > 0 ? deletedIds : [fileId]);
 
-    await storageAdapter.deleteFilesByPrefix(activeWorkspace.id, target.path);
-    const updatedWorkspace: Workspace = {
-      ...activeWorkspace,
-      updatedAt: new Date().toISOString(),
-    };
-    await storageAdapter.saveWorkspace(updatedWorkspace);
-    const workspaces = await storageAdapter.listWorkspaces();
-
-    const remainingFiles = files.filter((f) => !removedIds.has(f.id));
-    const remainingTabs = openTabIds.filter((id) => !removedIds.has(id));
+    const remainingFiles = files.filter((f) => !removedSet.has(f.id));
+    const remainingTabs = openTabIds.filter((id) => !removedSet.has(id));
 
     const nextDrafts = { ...drafts };
     const nextProblems = { ...problemsByFile };
-    for (const id of removedIds) {
+    for (const id of removedSet) {
       delete nextDrafts[id];
       delete nextProblems[id];
     }
 
     let nextActiveFileId = activeFileId;
-    if (activeFileId && removedIds.has(activeFileId)) {
+    if (activeFileId && removedSet.has(activeFileId)) {
       nextActiveFileId = remainingTabs[remainingTabs.length - 1] ?? null;
     }
 
     set({
-      workspaces,
-      activeWorkspace: updatedWorkspace,
       files: remainingFiles,
       openTabIds: remainingTabs,
       activeFileId: nextActiveFileId,
@@ -624,7 +558,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       } else {
         nextDrafts[fileId] = content;
       }
-      return { drafts: nextDrafts };
+      return { drafts: nextDrafts, saveError: null };
     });
   },
 
@@ -646,30 +580,44 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const draft = drafts[fileId];
     if (draft === undefined) return;
 
-    const now = new Date().toISOString();
-    const updatedFile: WorkspaceFile = {
-      ...file,
-      content: draft,
-      updatedAt: now,
-    };
+    set((state) => ({
+      savingFileIds: { ...state.savingFileIds, [fileId]: true },
+      saveError: null,
+    }));
 
-    await storageAdapter.saveFile(updatedFile);
-    const updatedWorkspace: Workspace = { ...activeWorkspace, updatedAt: now };
-    await storageAdapter.saveWorkspace(updatedWorkspace);
-    const workspaces = await storageAdapter.listWorkspaces();
+    try {
+      const updatedFile = await storageAdapter.updateFileContent(fileId, draft);
 
-    set((state) => {
-      const nextDrafts = { ...state.drafts };
-      delete nextDrafts[fileId];
-      return {
-        workspaces,
-        activeWorkspace: updatedWorkspace,
-        files: state.files.map((f) => (f.id === fileId ? updatedFile : f)),
-        drafts: nextDrafts,
-      };
-    });
+      set((state) => {
+        const nextDrafts = { ...state.drafts };
+        if (nextDrafts[fileId] === draft) {
+          delete nextDrafts[fileId];
+        }
+        const nextSaving = { ...state.savingFileIds };
+        delete nextSaving[fileId];
 
-    get().appendOutput('Storage', 'success', `Saved ${file.path}`);
+        return {
+          files: state.files.map((f) => (f.id === fileId ? updatedFile : f)),
+          drafts: nextDrafts,
+          savingFileIds: nextSaving,
+          saveError: null,
+        };
+      });
+
+      get().appendOutput('Storage', 'success', `Saved ${file.path} to MongoDB`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Save failed';
+      set((state) => {
+        const nextSaving = { ...state.savingFileIds };
+        delete nextSaving[fileId];
+        return {
+          savingFileIds: nextSaving,
+          saveError: message,
+        };
+      });
+      get().appendOutput('Storage', 'error', `Failed to save ${file.path}: ${message}`);
+      throw new Error(message);
+    }
   },
 
   saveAllFiles: async () => {
@@ -822,13 +770,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       case 'help':
         pushLines([
           inputLine,
-          out('Available Phase 1 Local Preview Shell commands:', 'info'),
+          out('Available Local Preview Shell commands:', 'info'),
           out('  help          Show available commands'),
           out('  ls            List workspace files and folders'),
           out('  tree          Display workspace directory structure'),
           out('  cat <path>    Print contents of a file in this workspace'),
           out('  pwd           Print current workspace directory'),
-          out('  whoami        Show active demo profile'),
+          out('  whoami        Show active workspace user'),
           out('  date          Show current timestamp'),
           out('  echo <text>   Print text to shell'),
           out('  clear         Clear terminal buffer'),
@@ -841,7 +789,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         break;
 
       case 'whoami':
-        pushLines([inputLine, out('local-developer (Phase 1 Browser Session)')]);
+        pushLines([inputLine, out('authenticated-developer (MongoDB Workspace Session)')]);
         break;
 
       case 'date':

@@ -1,15 +1,23 @@
-import { AlertCircle, AlertTriangle, Database, GitBranch } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Database, GitBranch, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useThemeStore } from '../../store/useThemeStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { getMonacoLanguageLabel } from '../../utils/language';
 
 export function StatusBar() {
-  const { files, activeFileId, cursorPosition, problemsByFile, setBottomPanelTab } =
-    useWorkspaceStore();
+  const {
+    files,
+    activeFileId,
+    cursorPosition,
+    problemsByFile,
+    savingFileIds,
+    saveError,
+    setBottomPanelTab,
+  } = useWorkspaceStore();
   const { editorSettings } = useThemeStore();
 
   const activeFile = files.find((f) => f.id === activeFileId && f.type === 'file') ?? null;
+  const isSaving = Object.keys(savingFileIds).length > 0;
 
   const { errors, warnings } = useMemo(() => {
     let err = 0;
@@ -27,7 +35,7 @@ export function StatusBar() {
     <footer className="flex h-6 shrink-0 items-center justify-between border-t border-[#CBD5E1] bg-[#E2E8F0] px-3 text-[11px] text-[#334155] dark:border-[#292E38] dark:bg-[#14171D] dark:text-[#9299A7]">
       {/* Left Status Items */}
       <div className="flex items-center gap-3.5">
-        <span className="flex items-center gap-1" title="Git branch placeholder (Phase 2+)">
+        <span className="flex items-center gap-1" title="Git branch placeholder (Phase 3+)">
           <GitBranch className="h-3 w-3" />
           <span>main</span>
         </span>
@@ -68,10 +76,24 @@ export function StatusBar() {
 
         <span
           className="flex items-center gap-1"
-          title="Browser persistence active (MongoDB sync in Phase 2)"
+          title="Persisted in MongoDB via Express API"
         >
-          <Database className="h-3 w-3 text-[#4F8CFF]" />
-          <span className="hidden sm:inline">Local Storage</span>
+          {isSaving ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin text-[#4F8CFF]" />
+              <span className="hidden sm:inline">Saving...</span>
+            </>
+          ) : saveError ? (
+            <>
+              <AlertCircle className="h-3 w-3 text-[#EF4444]" />
+              <span className="hidden text-[#EF4444] sm:inline">Sync Error</span>
+            </>
+          ) : (
+            <>
+              <Database className="h-3 w-3 text-[#4F8CFF]" />
+              <span className="hidden sm:inline">MongoDB Synced</span>
+            </>
+          )}
         </span>
       </div>
     </footer>

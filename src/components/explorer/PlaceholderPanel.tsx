@@ -22,8 +22,8 @@ export function SourceControlPanel() {
             <span>Git Integration Planned</span>
           </div>
           <p className="mt-1.5 text-xs leading-relaxed text-[#475569] dark:text-[#9299A7]">
-            Remote repository cloning, diffs, and commit history connect with backend workspace
-            sync in Phase 2+. Below are your unsaved local edits in this browser session.
+            Remote repository cloning, diffs, and commit history arrive in upcoming phases. Below
+            are unsaved local edits pending MongoDB sync.
           </p>
         </div>
 

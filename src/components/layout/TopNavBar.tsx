@@ -1,8 +1,11 @@
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   Cloud,
   LayoutDashboard,
+  Loader2,
+  LogOut,
   Moon,
   Play,
   Save,
@@ -14,6 +17,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useAuthStore } from '../../store/useAuthStore';
 import { useThemeStore } from '../../store/useThemeStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { getLanguageMeta } from '../../utils/language';
@@ -25,12 +29,16 @@ interface TopNavBarProps {
 
 export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarProps) {
   const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
   const {
     activeWorkspace,
     drafts,
+    savingFileIds,
+    saveError,
     bottomPanelOpen,
     toggleBottomPanel,
     saveAllFiles,
+    closeWorkspace,
     appendOutput,
     setBottomPanelTab,
   } = useWorkspaceStore();
@@ -40,7 +48,14 @@ export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarPro
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const dirtyCount = Object.keys(drafts).length;
+  const isSaving = Object.keys(savingFileIds).length > 0;
   const langMeta = activeWorkspace ? getLanguageMeta(activeWorkspace.language) : null;
+
+  const initials = (user?.name ?? 'Dev')
+    .split(/\s+/)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -55,18 +70,29 @@ export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarPro
 
   const handleSaveAll = async () => {
     if (dirtyCount === 0) return;
-    const count = await saveAllFiles();
-    toast.success(`Saved ${count} ${count === 1 ? 'file' : 'files'}`);
+    try {
+      const count = await saveAllFiles();
+      toast.success(`Saved ${count} ${count === 1 ? 'file' : 'files'}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Save failed.');
+    }
   };
 
   const handleRunClick = () => {
     appendOutput(
       'Execution',
       'warning',
-      'Code execution is not connected in Phase 1. Docker containers (Phase 3) and the execution service (Phase 5) will enable remote runs.',
+      'Code execution is not connected in Phase 2. Docker containers (Phase 3) and the execution service (Phase 5) will enable remote runs.',
     );
     setBottomPanelTab('output');
-    toast.info('Run unavailable in Phase 1 — Docker execution engine connects in Phase 5.');
+    toast.info('Run unavailable in Phase 2 — Docker execution engine connects in Phases 3–5.');
+  };
+
+  const handleLogout = async () => {
+    setProfileOpen(false);
+    closeWorkspace();
+    await logout();
+    navigate('/login');
   };
 
   return (
@@ -102,19 +128,32 @@ export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarPro
 
       {/* Center / Primary Workspace Actions */}
       <div className="flex shrink-0 items-center gap-2">
-        {/* Save Status & Action */}
         <button
           type="button"
           onClick={() => void handleSaveAll()}
-          disabled={dirtyCount === 0}
+          disabled={dirtyCount === 0 && !isSaving}
           title={dirtyCount > 0 ? 'Save all unsaved files (Ctrl+S)' : 'All changes saved'}
           className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-            dirtyCount > 0
-              ? 'bg-[#4F8CFF]/15 text-[#2563EB] hover:bg-[#4F8CFF]/25 dark:text-[#7AA2F7]'
-              : 'text-[#64748B] dark:text-[#9299A7]'
+            saveError
+              ? 'bg-[#DC2626]/15 text-[#DC2626]'
+              : isSaving
+                ? 'bg-[#4F8CFF]/10 text-[#4F8CFF]'
+                : dirtyCount > 0
+                  ? 'bg-[#4F8CFF]/15 text-[#2563EB] hover:bg-[#4F8CFF]/25 dark:text-[#7AA2F7]'
+                  : 'text-[#64748B] dark:text-[#9299A7]'
           }`}
         >
-          {dirtyCount > 0 ? (
+          {isSaving ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Saving...</span>
+            </>
+          ) : saveError ? (
+            <>
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span>Save Failed</span>
+            </>
+          ) : dirtyCount > 0 ? (
             <>
               <Save className="h-3.5 w-3.5" />
               <span className="tabular-nums">Save ({dirtyCount})</span>
@@ -127,11 +166,10 @@ export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarPro
           )}
         </button>
 
-        {/* Run Button (Explicit Phase 5 Notice) */}
         <button
           type="button"
           onClick={handleRunClick}
-          title="Execution engine connects in Phase 5 (Docker Sandbox)"
+          title="Execution engine connects in Phases 3–5 (Docker Sandbox)"
           className="flex items-center gap-1.5 rounded-md border border-[#CBD5E1] bg-white px-2.5 py-1 text-xs font-medium text-[#64748B] transition-colors hover:border-[#94A3B8] hover:text-[#0F172A] whitespace-nowrap dark:border-[#292E38] dark:bg-[#111318] dark:text-[#9299A7] dark:hover:border-[#3E4554] dark:hover:text-[#E5E7EB]"
         >
           <Play className="h-3.5 w-3.5" />
@@ -176,21 +214,21 @@ export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarPro
             className="flex items-center gap-1.5 rounded-md border border-[#CBD5E1] bg-white px-2 py-1 text-xs font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC] dark:border-[#292E38] dark:bg-[#111318] dark:text-[#E5E7EB] dark:hover:bg-[#1E222B]"
           >
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#4F8CFF] text-[10px] font-semibold text-white">
-              LD
+              {initials || 'U'}
             </span>
-            <span className="hidden sm:inline">Developer</span>
+            <span className="hidden max-w-[110px] truncate sm:inline">{user?.name ?? 'User'}</span>
             <ChevronDown className="h-3 w-3 text-[#64748B] dark:text-[#9299A7]" />
           </button>
 
           {profileOpen && (
-            <div className="absolute right-0 z-50 mt-1.5 w-56 rounded-lg border border-[#CBD5E1] bg-white py-1.5 shadow-xl dark:border-[#292E38] dark:bg-[#171A21]">
+            <div className="absolute right-0 z-50 mt-1.5 w-60 rounded-lg border border-[#CBD5E1] bg-white py-1.5 shadow-xl dark:border-[#292E38] dark:bg-[#171A21]">
               <div className="border-b border-[#CBD5E1] px-3 py-2 dark:border-[#292E38]">
                 <div className="flex items-center gap-2 text-xs font-semibold text-[#0F172A] dark:text-[#E5E7EB]">
                   <User className="h-3.5 w-3.5 text-[#4F8CFF]" />
-                  <span>Local Demo User</span>
+                  <span className="truncate">{user?.name ?? 'Authenticated User'}</span>
                 </div>
-                <div className="mt-0.5 text-[11px] text-[#64748B] dark:text-[#9299A7]">
-                  Phase 1 Browser Session (JWT Auth in Phase 2)
+                <div className="mt-0.5 truncate text-[11px] text-[#64748B] dark:text-[#9299A7]">
+                  {user?.email ?? ''}
                 </div>
               </div>
 
@@ -205,6 +243,17 @@ export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarPro
                 >
                   <LayoutDashboard className="h-3.5 w-3.5" />
                   <span>Workspace Dashboard</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate('/profile');
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[#334155] hover:bg-[#F1F5F9] dark:text-[#E5E7EB] dark:hover:bg-[#222631]"
+                >
+                  <User className="h-3.5 w-3.5" />
+                  <span>Profile &amp; Password</span>
                 </button>
                 <button
                   type="button"
@@ -242,6 +291,17 @@ export function TopNavBar({ onOpenSettings, onOpenCommandPalette }: TopNavBarPro
                 >
                   <Settings className="h-3.5 w-3.5" />
                   <span>Editor Settings</span>
+                </button>
+
+                <div className="my-1 border-t border-[#CBD5E1] dark:border-[#292E38]" />
+
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[#DC2626] hover:bg-[#DC2626]/10"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Log out</span>
                 </button>
               </div>
             </div>

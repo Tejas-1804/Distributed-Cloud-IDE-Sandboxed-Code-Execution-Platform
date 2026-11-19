@@ -1,7 +1,18 @@
-import { Cloud, FolderGit2, Moon, Plus, RotateCcw, Search, Sun } from 'lucide-react';
+
+import {
+  ArrowUpRight,
+  Cloud,
+  FolderGit2,
+  Moon,
+  Plus,
+  RotateCcw,
+  Search,
+  Sun,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+
 import { Modal } from '../components/common/Modal';
 import { CreateWorkspaceModal } from '../components/dashboard/CreateWorkspaceModal';
 import { WorkspaceCard } from '../components/dashboard/WorkspaceCard';
@@ -12,6 +23,7 @@ import { SUPPORTED_LANGUAGES } from '../utils/language';
 
 export function Dashboard() {
   const navigate = useNavigate();
+
   const {
     workspaces,
     loading,
@@ -20,10 +32,12 @@ export function Dashboard() {
     deleteWorkspace,
     restoreDemoWorkspace,
   } = useWorkspaceStore();
+
   const { theme, toggleTheme } = useThemeStore();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [languageFilter, setLanguageFilter] = useState<'all' | SupportedLanguage>('all');
+  const [languageFilter, setLanguageFilter] =
+    useState<'all' | SupportedLanguage>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Workspace | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -35,13 +49,17 @@ export function Dashboard() {
 
   const filteredWorkspaces = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+
     return workspaces.filter((ws) => {
-      const matchesLanguage = languageFilter === 'all' || ws.language === languageFilter;
+      const matchesLanguage =
+        languageFilter === 'all' || ws.language === languageFilter;
+
       const matchesQuery =
         !q ||
         ws.name.toLowerCase().includes(q) ||
         ws.description.toLowerCase().includes(q) ||
         ws.language.toLowerCase().includes(q);
+
       return matchesLanguage && matchesQuery;
     });
   }, [workspaces, searchQuery, languageFilter]);
@@ -51,6 +69,7 @@ export function Dashboard() {
       .sort((a, b) => {
         const aTime = new Date(a.lastOpenedAt ?? a.updatedAt).getTime();
         const bTime = new Date(b.lastOpenedAt ?? b.updatedAt).getTime();
+
         return bTime - aTime;
       })
       .slice(0, 3);
@@ -62,196 +81,351 @@ export function Dashboard() {
 
   const handleCommitRename = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!renameTarget) return;
+
     try {
       await renameWorkspace(renameTarget.id, renameValue);
+
       toast.success(`Renamed workspace to "${renameValue.trim()}"`);
       setRenameTarget(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not rename workspace.');
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : 'Could not rename workspace.',
+      );
     }
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
+
     await deleteWorkspace(deleteTarget.id);
+
     toast.success(`Deleted workspace "${deleteTarget.name}"`);
     setDeleteTarget(null);
   };
 
   const handleRestoreDemo = async () => {
     const ws = await restoreDemoWorkspace();
+
     toast.success(`Created "${ws.name}"`);
   };
 
+  const clearFilters = () => {
+    setSearchQuery('');
+    setLanguageFilter('all');
+  };
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] dark:bg-[#111318] dark:text-[#E5E7EB]">
-      {/* Top Bar */}
-      <header className="border-b border-[#CBD5E1] bg-white dark:border-[#292E38] dark:bg-[#171A21]">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-8 px-6">
-          <div className="flex items-center gap-2.5 whitespace-nowrap shrink-0">
-            <Cloud className="h-5 w-5 text-[#4F8CFF]" />
-            <span className="text-base font-bold tracking-tight">Cloud IDE</span>
+    <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text-primary)] transition-colors duration-200">
+      {/* ─────────────────────────────────────────────────────────────
+          TOP NAVIGATION
+      ───────────────────────────────────────────────────────────── */}
+
+      <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-[68px] max-w-[1400px] items-center justify-between px-5 sm:px-7 lg:px-10">
+          {/* Brand */}
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-raised)]">
+              <Cloud className="h-[17px] w-[17px] text-[var(--brand-accent)]" strokeWidth={1.9} />
+            </div>
+
+            <div className="leading-none">
+              <div className="text-[14px] font-semibold tracking-[-0.01em]">
+                Cloud IDE
+              </div>
+
+              <div className="mt-1 hidden text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--text-muted)] sm:block">
+                Developer workspace
+              </div>
+            </div>
           </div>
 
-          <nav className="hidden items-center gap-6 text-xs font-medium text-[#475569] sm:flex dark:text-[#9299A7]">
+          {/* Navigation */}
+          <nav className="hidden items-center gap-7 md:flex">
             <a
               href="#workspaces"
-              className="text-[#0F172A] hover:text-[#4F8CFF] whitespace-nowrap shrink-0 dark:text-[#E5E7EB]"
+              className="relative text-[12px] font-semibold text-[var(--text-primary)] transition-colors after:absolute after:-bottom-[24px] after:left-0 after:h-px after:w-full after:bg-[var(--brand-accent)]"
             >
               Workspaces
             </a>
+
             <button
               type="button"
               onClick={toggleTheme}
-              className="flex items-center gap-1.5 hover:text-[#0F172A] whitespace-nowrap shrink-0 dark:hover:text-[#E5E7EB]"
+              className="group flex items-center gap-2 text-[12px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+              aria-label="Toggle theme"
             >
-              {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-              <span>{theme === 'dark' ? 'Light Theme' : 'Dark Theme'}</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-raised)] transition-colors group-hover:border-[var(--border-strong)]">
+                {theme === 'dark' ? (
+                  <Sun className="h-[13px] w-[13px]" />
+                ) : (
+                  <Moon className="h-[13px] w-[13px]" />
+                )}
+              </span>
+
+              <span>
+                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              </span>
             </button>
           </nav>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="flex items-center gap-1.5 rounded-md bg-[#4F8CFF] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#3B7AE8] whitespace-nowrap shrink-0"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>New Workspace</span>
-            </button>
-          </div>
+          {/* Action */}
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="group flex items-center gap-2 rounded-[7px] bg-[var(--brand-accent)] px-4 py-2.5 text-[11px] font-semibold tracking-[0.01em] text-white shadow-[var(--shadow-sm)] transition-all duration-150 hover:bg-[var(--brand-accent-hover)] hover:-translate-y-px"
+          >
+            <Plus className="h-[14px] w-[14px]" strokeWidth={2.2} />
+            <span>New workspace</span>
+          </button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main id="workspaces" className="mx-auto max-w-6xl px-6 py-8">
-        {/* Welcome Header */}
-        <section className="flex flex-col justify-between gap-4 border-b border-[#CBD5E1] pb-6 md:flex-row md:items-end dark:border-[#292E38]">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-              Developer Workspaces
+      {/* ─────────────────────────────────────────────────────────────
+          MAIN
+      ───────────────────────────────────────────────────────────── */}
+
+      <main
+        id="workspaces"
+        className="mx-auto max-w-[1400px] px-5 py-8 sm:px-7 sm:py-10 lg:px-10 lg:py-12"
+      >
+        {/* Hero */}
+        <section className="flex flex-col justify-between gap-7 border-b border-[var(--border)] pb-8 lg:flex-row lg:items-end">
+          <div className="max-w-3xl">
+            <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--brand-accent)]">
+              <span className="h-px w-5 bg-[var(--brand-accent)]" />
+              Workspace console
+            </div>
+
+            <h1 className="text-[30px] font-semibold leading-[1.08] tracking-[-0.035em] sm:text-[38px]">
+              Your development workspace.
             </h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-[#475569] dark:text-[#9299A7]">
-              Create, edit, and organize multi-language projects in the browser-based Monaco IDE.
-              Workspaces persist locally via a storage adapter ready for Phase 2 MongoDB sync.
+
+            <p className="mt-4 max-w-2xl text-[13px] leading-6 text-[var(--text-secondary)] sm:text-[14px]">
+              Create, edit, and organize multi-language projects from the
+              browser. Your workspaces persist locally and are structured for
+              future cloud synchronization.
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs text-[#475569] dark:text-[#9299A7]">
-            <span className="tabular-nums">{workspaces.length} total workspaces</span>
-            <span aria-hidden="true">·</span>
-            <span>Phase 1 Local Persistence</span>
+
+          {/* Stats */}
+          <div className="flex shrink-0 items-center gap-7 lg:pb-1">
+            <div>
+              <div className="text-[22px] font-semibold tracking-[-0.03em] tabular-nums">
+                {workspaces.length}
+              </div>
+
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                Workspaces
+              </div>
+            </div>
+
+            <div className="h-8 w-px bg-[var(--border)]" />
+
+            <div>
+              <div className="text-[22px] font-semibold tracking-[-0.03em]">
+                Local
+              </div>
+
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                Persistence
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* Recent Workspaces Strip */}
+        {/* Recent workspaces */}
         {recentWorkspaces.length > 0 && (
-          <section className="mt-7">
+          <section className="mt-9">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xs font-semibold text-[#475569] dark:text-[#9299A7]">
-                Recent Workspaces
-              </h2>
+              <div>
+                <h2 className="text-[12px] font-semibold tracking-[-0.01em]">
+                  Continue working
+                </h2>
+
+                <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                  Recently opened workspaces
+                </p>
+              </div>
+
+              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                {recentWorkspaces.length} recent
+              </span>
             </div>
+
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {recentWorkspaces.map((ws) => (
                 <button
                   key={`recent-${ws.id}`}
                   type="button"
                   onClick={() => handleOpenWorkspace(ws.id)}
-                  className="flex items-center justify-between rounded-lg border border-[#CBD5E1] bg-white px-4 py-3 text-left transition-colors hover:border-[#4F8CFF] dark:border-[#292E38] dark:bg-[#171A21] dark:hover:border-[#4F8CFF]"
+                  className="group flex min-h-[88px] items-center justify-between border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition-all duration-150 hover:-translate-y-[1px] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)] hover:shadow-[var(--shadow-sm)]"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">{ws.name}</div>
-                    <div className="mt-0.5 text-xs text-[#475569] dark:text-[#9299A7]">
-                      {ws.language} · {ws.template}
+                  <div className="flex min-w-0 items-center gap-3.5">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--brand-accent)]">
+                      <FolderGit2 className="h-[15px] w-[15px]" strokeWidth={1.8} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="truncate text-[12px] font-semibold">
+                        {ws.name}
+                      </div>
+
+                      <div className="mt-1 truncate text-[10px] font-medium text-[var(--text-muted)]">
+                        {ws.language} · {ws.template}
+                      </div>
                     </div>
                   </div>
-                  <span className="ml-3 shrink-0 text-xs font-medium text-[#4F8CFF]">Open</span>
+
+                  <ArrowUpRight
+                    className="ml-3 h-[15px] w-[15px] shrink-0 text-[var(--text-muted)] transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[var(--brand-accent)]"
+                    strokeWidth={1.8}
+                  />
                 </button>
               ))}
             </div>
           </section>
         )}
 
-        {/* Filter & Search Toolbar */}
-        <section className="mt-8 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#64748B] dark:text-[#9299A7]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search workspaces..."
-              aria-label="Search workspaces"
-              className="w-full rounded-md border border-[#CBD5E1] bg-white py-2 pr-3 pl-9 text-xs text-[#0F172A] placeholder:text-[#64748B] focus:border-[#4F8CFF] focus:outline-none dark:border-[#292E38] dark:bg-[#171A21] dark:text-[#E5E7EB] dark:placeholder:text-[#9299A7]"
-            />
-          </div>
+        {/* Toolbar */}
+        <section className="mt-10">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            {/* Search */}
+            <div className="relative w-full lg:max-w-[390px]">
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-[var(--text-muted)]"
+                strokeWidth={1.8}
+              />
 
-          <div className="flex flex-wrap items-center gap-1 rounded-md border border-[#CBD5E1] bg-white p-1 dark:border-[#292E38] dark:bg-[#171A21]">
-            <button
-              type="button"
-              onClick={() => setLanguageFilter('all')}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                languageFilter === 'all'
-                  ? 'bg-[#4F8CFF] text-white'
-                  : 'text-[#475569] hover:text-[#0F172A] dark:text-[#9299A7] dark:hover:text-[#E5E7EB]'
-              }`}
-            >
-              All
-            </button>
-            {SUPPORTED_LANGUAGES.map((lang) => (
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search workspaces..."
+                aria-label="Search workspaces"
+                className="h-10 w-full border border-[var(--border)] bg-[var(--surface)] py-2 pr-10 pl-10 text-[11px] font-medium text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] focus:border-[var(--brand-accent)]"
+              />
+
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-1 border border-[var(--border)] bg-[var(--surface)] p-1">
               <button
-                key={lang.id}
                 type="button"
-                onClick={() => setLanguageFilter(lang.id)}
-                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                  languageFilter === lang.id
-                    ? 'bg-[#4F8CFF] text-white'
-                    : 'text-[#475569] hover:text-[#0F172A] dark:text-[#9299A7] dark:hover:text-[#E5E7EB]'
+                onClick={() => setLanguageFilter('all')}
+                className={`px-3 py-1.5 text-[10px] font-semibold transition-colors ${
+                  languageFilter === 'all'
+                    ? 'bg-[var(--brand-primary)] text-white dark:text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                {lang.label}
+                All
               </button>
-            ))}
+
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <button
+                  key={lang.id}
+                  type="button"
+                  onClick={() => setLanguageFilter(lang.id)}
+                  className={`px-3 py-1.5 text-[10px] font-semibold transition-colors ${
+                    languageFilter === lang.id
+                      ? 'bg-[var(--brand-primary)] text-white dark:text-[var(--text-primary)]'
+                      : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {lang.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Result context */}
+          <div className="mt-3 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+            <span>
+              {filteredWorkspaces.length}{' '}
+              {filteredWorkspaces.length === 1 ? 'workspace' : 'workspaces'}
+            </span>
+
+            {(searchQuery || languageFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="font-semibold text-[var(--brand-accent)] hover:text-[var(--brand-accent-hover)]"
+              >
+                Reset filters
+              </button>
+            )}
           </div>
         </section>
 
-        {/* Workspace Grid */}
-        <section className="mt-5">
+        {/* Workspace grid */}
+        <section className="mt-4">
           {loading && workspaces.length === 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[1, 2, 3].map((n) => (
                 <div
                   key={n}
-                  className="h-44 animate-pulse rounded-lg border border-[#CBD5E1] bg-white p-5 dark:border-[#292E38] dark:bg-[#171A21]"
-                />
+                  className="h-[190px] animate-pulse border border-[var(--border)] bg-[var(--surface)]"
+                >
+                  <div className="h-1 w-full bg-[var(--surface-raised)]" />
+                  <div className="space-y-3 p-5">
+                    <div className="h-3 w-24 rounded bg-[var(--surface-raised)]" />
+                    <div className="h-5 w-40 rounded bg-[var(--surface-raised)]" />
+                    <div className="h-3 w-full rounded bg-[var(--surface-raised)]" />
+                    <div className="h-3 w-3/4 rounded bg-[var(--surface-raised)]" />
+                  </div>
+                </div>
               ))}
             </div>
           ) : filteredWorkspaces.length === 0 ? (
-            <div className="rounded-lg border border-[#CBD5E1] bg-white px-6 py-12 text-center dark:border-[#292E38] dark:bg-[#171A21]">
-              <FolderGit2 className="mx-auto h-8 w-8 text-[#64748B] dark:text-[#9299A7]" />
-              <h3 className="mt-3 text-sm font-semibold">No workspaces match your view</h3>
-              <p className="mt-1 text-xs text-[#475569] dark:text-[#9299A7]">
+            <div className="border border-[var(--border)] bg-[var(--surface)] px-6 py-16 text-center">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
+                <FolderGit2
+                  className="h-[17px] w-[17px] text-[var(--brand-accent)]"
+                  strokeWidth={1.7}
+                />
+              </div>
+
+              <h3 className="mt-5 text-[13px] font-semibold">
+                No workspaces found
+              </h3>
+
+              <p className="mx-auto mt-2 max-w-sm text-[11px] leading-5 text-[var(--text-muted)]">
                 {workspaces.length === 0
-                  ? 'Create a new workspace or restore the sample CloudIDE-Demo project.'
-                  : 'Try clearing your search query or selecting another language filter.'}
+                  ? 'Create your first workspace or restore the sample CloudIDE-Demo project.'
+                  : 'Try adjusting your search or language filter.'}
               </p>
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => setCreateOpen(true)}
-                  className="rounded-md bg-[#4F8CFF] px-4 py-2 text-xs font-medium text-white hover:bg-[#3B7AE8]"
+                  className="flex items-center gap-2 bg-[var(--brand-accent)] px-4 py-2.5 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)]"
                 >
-                  Create Workspace
+                  <Plus className="h-3.5 w-3.5" />
+                  Create workspace
                 </button>
+
                 {workspaces.length === 0 && (
                   <button
                     type="button"
                     onClick={() => void handleRestoreDemo()}
-                    className="flex items-center gap-1.5 rounded-md border border-[#CBD5E1] px-4 py-2 text-xs font-medium hover:bg-[#F1F5F9] dark:border-[#292E38] dark:hover:bg-[#222631]"
+                    className="flex items-center gap-2 border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-[10px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    Restore CloudIDE-Demo
+                    Restore demo
                   </button>
                 )}
               </div>
@@ -275,7 +449,10 @@ export function Dashboard() {
         </section>
       </main>
 
-      {/* Modals */}
+      {/* ─────────────────────────────────────────────────────────────
+          CREATE WORKSPACE
+      ───────────────────────────────────────────────────────────── */}
+
       <CreateWorkspaceModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -285,38 +462,51 @@ export function Dashboard() {
         }}
       />
 
+      {/* ─────────────────────────────────────────────────────────────
+          RENAME
+      ───────────────────────────────────────────────────────────── */}
+
       <Modal
         open={Boolean(renameTarget)}
         onClose={() => setRenameTarget(null)}
         title="Rename Workspace"
         maxWidthClass="max-w-sm"
       >
-        <form onSubmit={(e) => void handleCommitRename(e)} className="space-y-4">
+        <form
+          onSubmit={(e) => void handleCommitRename(e)}
+          className="space-y-4"
+        >
           <input
             type="text"
             autoFocus
             required
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
-            className="w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm text-[#0F172A] focus:border-[#4F8CFF] focus:outline-none dark:border-[#292E38] dark:bg-[#111318] dark:text-[#E5E7EB]"
+            className="w-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[12px] text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--brand-accent)]"
           />
+
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setRenameTarget(null)}
-              className="rounded-md border border-[#CBD5E1] px-3 py-1.5 text-xs font-medium hover:bg-[#F1F5F9] dark:border-[#292E38] dark:hover:bg-[#222631]"
+              className="border border-[var(--border-strong)] px-3.5 py-2 text-[10px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
             >
               Cancel
             </button>
+
             <button
               type="submit"
-              className="rounded-md bg-[#4F8CFF] px-3.5 py-1.5 text-xs font-medium text-white hover:bg-[#3B7AE8]"
+              className="bg-[var(--brand-accent)] px-4 py-2 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)]"
             >
-              Save Name
+              Save name
             </button>
           </div>
         </form>
       </Modal>
+
+      {/* ─────────────────────────────────────────────────────────────
+          DELETE
+      ───────────────────────────────────────────────────────────── */}
 
       <Modal
         open={Boolean(deleteTarget)}
@@ -324,27 +514,30 @@ export function Dashboard() {
         title="Delete Workspace"
         maxWidthClass="max-w-sm"
       >
-        <p className="text-xs leading-relaxed text-[#475569] dark:text-[#9299A7]">
+        <p className="text-[11px] leading-5 text-[var(--text-secondary)]">
           Permanently delete{' '}
-          <span className="font-semibold text-[#0F172A] dark:text-[#E5E7EB]">
+          <span className="font-semibold text-[var(--text-primary)]">
             {deleteTarget?.name}
           </span>{' '}
-          and all its files from browser storage? This action cannot be undone.
+          and all its files from browser storage? This action cannot be
+          undone.
         </p>
+
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={() => setDeleteTarget(null)}
-            className="rounded-md border border-[#CBD5E1] px-3 py-1.5 text-xs font-medium hover:bg-[#F1F5F9] dark:border-[#292E38] dark:hover:bg-[#222631]"
+            className="border border-[var(--border-strong)] px-3.5 py-2 text-[10px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
           >
             Cancel
           </button>
+
           <button
             type="button"
             onClick={() => void handleConfirmDelete()}
-            className="rounded-md bg-[#DC2626] px-3.5 py-1.5 text-xs font-medium text-white hover:bg-[#B91C1C]"
+            className="bg-[#9f4b43] px-4 py-2 text-[10px] font-semibold text-white transition-colors hover:bg-[#8e4039]"
           >
-            Delete Workspace
+            Delete workspace
           </button>
         </div>
       </Modal>

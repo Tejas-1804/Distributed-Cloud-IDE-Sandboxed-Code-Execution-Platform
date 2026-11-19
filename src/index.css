@@ -1,9 +1,16 @@
+
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* =========================================================
-   GLOBAL DESIGN SYSTEM
+   PREMIUM CLOUD IDE DESIGN SYSTEM
+
+   LIGHT:
+   White + Warm Beige + Espresso Brown
+
+   DARK:
+   Deep Charcoal + Warm Brown + Champagne Accent
    ========================================================= */
 
 :root {
@@ -19,29 +26,52 @@
 
   color-scheme: light;
 
-  /* Light theme */
-  --app-bg: #f8fafc;
+  /* =======================================================
+     LIGHT THEME
+     ======================================================= */
+
+  /* Brand */
+  --brand-primary: #4b3628;
+  --brand-accent: #b08968;
+  --brand-accent-hover: #987555;
+  --brand-accent-soft: rgba(176, 137, 104, 0.12);
+
+  /* Application */
+  --app-bg: #faf9f7;
   --surface: #ffffff;
-  --surface-raised: #f1f5f9;
-  --surface-hover: #eaf0f7;
+  --surface-raised: #f6f2ee;
+  --surface-hover: #f1ece7;
+  --surface-active: #ebe3dc;
 
-  --border: #cbd5e1;
-  --border-subtle: #e2e8f0;
+  /* Borders */
+  --border: #e2d8cf;
+  --border-subtle: #ece6e0;
+  --border-strong: #d2c4b8;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  /* Text */
+  --text-primary: #211a16;
+  --text-secondary: #62554c;
+  --text-muted: #95877d;
+  --text-disabled: #b5aaa2;
 
-  --accent: #4f8cff;
-  --accent-hover: #3b7ae8;
+  /* Status */
+  --success: #36795c;
+  --warning: #a9782f;
+  --danger: #b65353;
 
-  --success: #17865a;
-  --warning: #a66b00;
-  --danger: #c53030;
-
-  --radius-sm: 5px;
+  /* Shape */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+
+  /* Shadows */
+  --shadow-sm:
+    0 1px 2px rgba(75, 54, 40, 0.05);
+
+  --shadow-md:
+    0 10px 30px rgba(75, 54, 40, 0.08);
 }
 
 /* =========================================================
@@ -51,31 +81,50 @@
 html.dark {
   color-scheme: dark;
 
-  --app-bg: #0f1115;
-  --surface: #15181e;
-  --surface-raised: #1a1e26;
-  --surface-hover: #20252e;
+  /* Brand */
+  --brand-primary: #171311;
+  --brand-accent: #c29a75;
+  --brand-accent-hover: #d0aa86;
+  --brand-accent-soft: rgba(194, 154, 117, 0.13);
 
-  --border: #292f39;
-  --border-subtle: #20252d;
+  /* Application */
+  --app-bg: #121110;
+  --surface: #181614;
+  --surface-raised: #1f1b18;
+  --surface-hover: #28221e;
+  --surface-active: #302822;
 
-  --text-primary: #f2f4f7;
-  --text-secondary: #a7adb8;
-  --text-muted: #6f7784;
+  /* Borders */
+  --border: #352d27;
+  --border-subtle: #29231f;
+  --border-strong: #463a31;
 
-  --accent: #4f8cff;
-  --accent-hover: #6a9dff;
+  /* Text */
+  --text-primary: #f5f0eb;
+  --text-secondary: #b8aca2;
+  --text-muted: #81766e;
+  --text-disabled: #5c544e;
 
-  --success: #35c98b;
-  --warning: #e7b85c;
-  --danger: #e56363;
+  /* Status */
+  --success: #4fa477;
+  --warning: #d1a35d;
+  --danger: #d56b6b;
+
+  /* Shadows */
+  --shadow-sm:
+    0 1px 2px rgba(0, 0, 0, 0.28);
+
+  --shadow-md:
+    0 12px 35px rgba(0, 0, 0, 0.35);
 }
 
 /* =========================================================
    RESET
    ========================================================= */
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -90,23 +139,21 @@ body,
 
 html {
   background: var(--app-bg);
+  color: var(--text-primary);
+
   transition:
     background-color 180ms ease,
     color 180ms ease;
 }
 
 body {
-  background:
-    radial-gradient(
-      circle at 50% -20%,
-      rgba(79, 140, 255, 0.06),
-      transparent 42%
-    ),
-    var(--app-bg);
+  min-height: 100%;
 
+  background: var(--app-bg);
   color: var(--text-primary);
 
   font-size: 14px;
+  line-height: 1.5;
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -119,21 +166,7 @@ body {
 }
 
 /* =========================================================
-   LIGHT THEME BODY
-   ========================================================= */
-
-html:not(.dark) body {
-  background:
-    radial-gradient(
-      circle at 50% -20%,
-      rgba(79, 140, 255, 0.04),
-      transparent 42%
-    ),
-    var(--app-bg);
-}
-
-/* =========================================================
-   TYPOGRAPHY
+   FORM CONTROLS
    ========================================================= */
 
 button,
@@ -147,11 +180,21 @@ button {
   border: 0;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
-  outline: 1px solid rgba(79, 140, 255, 0.8);
-  outline-offset: 1px;
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(176, 137, 104, 0.35);
+  outline-offset: 2px;
 }
 
 /* =========================================================
@@ -159,12 +202,12 @@ textarea:focus-visible {
    ========================================================= */
 
 ::selection {
-  background: rgba(79, 140, 255, 0.28);
-  color: #ffffff;
+  background: rgba(176, 137, 104, 0.28);
+  color: var(--text-primary);
 }
 
 /* =========================================================
-   SCROLLBARS
+   SCROLLBAR
    ========================================================= */
 
 ::-webkit-scrollbar {
@@ -177,24 +220,28 @@ textarea:focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2b313b;
-  border-radius: 999px;
+  background: #cfc3b9;
   border: 2px solid transparent;
+  border-radius: 999px;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a424f;
+  background: #b9a99c;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
-html:not(.dark) ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+html.dark ::-webkit-scrollbar-thumb {
+  background: #40352d;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
-html:not(.dark) ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #514239;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 /* =========================================================
@@ -207,7 +254,7 @@ a {
 }
 
 /* =========================================================
-   COMMON APP SURFACES
+   SURFACES
    ========================================================= */
 
 .app-surface {
@@ -220,30 +267,53 @@ a {
   border: 1px solid var(--border);
 }
 
+.app-card {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.app-card-interactive {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.app-card-interactive:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
 /* =========================================================
-   BUTTON BASE
+   BUTTONS
    ========================================================= */
 
 .app-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 7px;
 
   min-height: 34px;
+  padding: 0 13px;
 
-  padding: 0 12px;
-
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
 
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 
-  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
 
   transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
     transform 100ms ease;
 }
 
@@ -251,25 +321,38 @@ a {
   transform: translateY(1px);
 }
 
+/* Primary */
+
 .app-button-primary {
-  background: var(--accent);
+  background: var(--brand-accent);
   color: #ffffff;
+
+  box-shadow:
+    0 1px 2px rgba(75, 54, 40, 0.15);
 }
 
 .app-button-primary:hover {
-  background: var(--accent-hover);
+  background: var(--brand-accent-hover);
+
+  box-shadow:
+    0 4px 14px rgba(176, 137, 104, 0.14);
 }
+
+/* Secondary */
 
 .app-button-secondary {
   background: var(--surface-raised);
-  border: 1px solid var(--border);
+  border-color: var(--border);
   color: var(--text-secondary);
 }
 
 .app-button-secondary:hover {
   background: var(--surface-hover);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }
+
+/* Ghost */
 
 .app-button-ghost {
   background: transparent;
@@ -277,12 +360,19 @@ a {
 }
 
 .app-button-ghost:hover {
-  background: rgba(0, 0, 0, 0.045);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
-html.dark .app-button-ghost:hover {
-  background: rgba(255, 255, 255, 0.045);
+/* Danger */
+
+.app-button-danger {
+  background: rgba(182, 83, 83, 0.09);
+  color: var(--danger);
+}
+
+.app-button-danger:hover {
+  background: rgba(182, 83, 83, 0.15);
 }
 
 /* =========================================================
@@ -291,12 +381,11 @@ html.dark .app-button-ghost:hover {
 
 .app-input {
   width: 100%;
-
   min-height: 36px;
 
   padding: 0 11px;
 
-  background: var(--surface);
+  background: var(--surface-raised);
   border: 1px solid var(--border);
 
   border-radius: var(--radius-md);
@@ -306,8 +395,9 @@ html.dark .app-button-ghost:hover {
   outline: none;
 
   transition:
-    border-color 140ms ease,
-    background-color 140ms ease;
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .app-input::placeholder {
@@ -315,23 +405,24 @@ html.dark .app-button-ghost:hover {
 }
 
 .app-input:hover {
-  border-color: #94a3b8;
-}
-
-html.dark .app-input:hover {
-  border-color: #343b47;
+  border-color: var(--border-strong);
 }
 
 .app-input:focus {
-  border-color: rgba(79, 140, 255, 0.7);
-  background: var(--surface);
+  border-color: rgba(176, 137, 104, 0.7);
+
+  box-shadow:
+    0 0 0 3px rgba(176, 137, 104, 0.09);
 }
 
 /* =========================================================
-   IDE-SPECIFIC HELPERS
+   IDE PANEL
    ========================================================= */
 
 .ide-panel {
+  min-width: 0;
+  min-height: 0;
+
   background: var(--surface);
   border-color: var(--border-subtle);
 }
@@ -342,62 +433,102 @@ html.dark .app-input:hover {
   display: flex;
   align-items: center;
 
-  padding: 0 12px;
+  padding: 0 13px;
+
+  background: var(--surface);
 
   border-bottom: 1px solid var(--border-subtle);
 
-  color: var(--text-secondary);
+  color: var(--text-muted);
 
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
 
-  letter-spacing: 0.06em;
-
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+
+  user-select: none;
 }
 
 .ide-divider {
   width: 1px;
+  height: 100%;
+
   background: var(--border-subtle);
 }
 
+/* =========================================================
+   IDE TABS
+   ========================================================= */
+
 .ide-tab {
+  position: relative;
+
   height: 38px;
 
   display: flex;
   align-items: center;
+  gap: 7px;
 
   padding: 0 14px;
+
+  background: transparent;
 
   border-right: 1px solid var(--border-subtle);
 
   color: var(--text-muted);
 
-  background: transparent;
-
   font-size: 12px;
+  font-weight: 500;
 
   transition:
-    color 120ms ease,
-    background-color 120ms ease;
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .ide-tab:hover {
+  background: var(--surface-hover);
   color: var(--text-secondary);
-  background: rgba(0, 0, 0, 0.025);
-}
-
-html.dark .ide-tab:hover {
-  background: rgba(255, 255, 255, 0.025);
 }
 
 .ide-tab-active {
-  color: var(--text-primary);
   background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.ide-tab-active::after {
+  content: "";
+
+  position: absolute;
+
+  left: 0;
+  right: 0;
+  bottom: -1px;
+
+  height: 2px;
+
+  background: var(--brand-accent);
 }
 
 /* =========================================================
-   STATUS COLORS
+   BRAND STATES
+   ========================================================= */
+
+.brand-selected {
+  color: var(--brand-accent);
+}
+
+.brand-border {
+  border-color: var(--brand-accent);
+}
+
+.brand-bg {
+  background: var(--brand-accent);
+  color: #ffffff;
+}
+
+/* =========================================================
+   STATUS
    ========================================================= */
 
 .status-online {
@@ -412,16 +543,31 @@ html.dark .ide-tab:hover {
   color: var(--danger);
 }
 
+.status-dot {
+  width: 6px;
+  height: 6px;
+
+  display: inline-block;
+
+  border-radius: 999px;
+
+  background: currentColor;
+}
+
 /* =========================================================
-   MONACO CONTAINER
+   EDITOR
    ========================================================= */
 
 .editor-container {
   width: 100%;
   height: 100%;
+
   min-width: 0;
   min-height: 0;
+
   overflow: hidden;
+
+  background: #141211;
 }
 
 /* =========================================================
@@ -429,9 +575,9 @@ html.dark .ide-tab:hover {
    ========================================================= */
 
 .terminal {
-  background: #0b0d10;
+  background: #0e0d0c;
 
-  color: #c8ced8;
+  color: #d0c9c3;
 
   font-family:
     "JetBrains Mono",
@@ -441,12 +587,15 @@ html.dark .ide-tab:hover {
     monospace;
 
   font-size: 12px;
+  line-height: 1.7;
 
-  line-height: 1.65;
+  tab-size: 2;
+
+  -webkit-font-smoothing: antialiased;
 }
 
 .terminal-muted {
-  color: #5f6875;
+  color: #776f68;
 }
 
 .terminal-success {
@@ -455,6 +604,10 @@ html.dark .ide-tab:hover {
 
 .terminal-error {
   color: var(--danger);
+}
+
+.terminal-warning {
+  color: var(--warning);
 }
 
 /* =========================================================
@@ -471,35 +624,65 @@ html.dark .ide-tab:hover {
   position: absolute;
 
   left: 50%;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 7px);
 
-  transform: translateX(-50%);
+  transform:
+    translateX(-50%)
+    translateY(2px);
 
-  padding: 5px 8px;
+  padding: 6px 8px;
 
-  background: #222730;
+  background: #211c18;
+  border: 1px solid #463a31;
 
-  border: 1px solid #343b47;
+  border-radius: 6px;
 
-  border-radius: 5px;
-
-  color: #e8ebef;
+  color: #f3eee9;
 
   font-size: 11px;
+  font-weight: 500;
+
+  line-height: 1.2;
 
   white-space: nowrap;
 
   pointer-events: none;
 
   opacity: 0;
+  visibility: hidden;
 
-  transition: opacity 120ms ease;
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
 
   z-index: 1000;
 }
 
 [data-tooltip]:hover::after {
   opacity: 1;
+  visibility: visible;
+
+  transform:
+    translateX(-50%)
+    translateY(0);
+}
+
+/* =========================================================
+   DIVIDERS
+   ========================================================= */
+
+.app-divider {
+  width: 100%;
+  height: 1px;
+
+  background: var(--border-subtle);
+}
+
+.app-divider-vertical {
+  width: 1px;
+  height: 100%;
+
+  background: var(--border-subtle);
 }
 
 /* =========================================================
@@ -510,10 +693,41 @@ html.dark .ide-tab:hover {
   body {
     font-size: 13px;
   }
+
+  .ide-panel-header {
+    padding: 0 10px;
+  }
+
+  .ide-tab {
+    padding: 0 11px;
+  }
 }
 
 @media (max-width: 640px) {
   body {
     overflow: auto;
+  }
+
+  .app-button {
+    min-height: 36px;
+  }
+
+  .ide-tab {
+    padding: 0 10px;
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

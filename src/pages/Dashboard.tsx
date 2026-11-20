@@ -1,4 +1,3 @@
-
 import {
   ArrowUpRight,
   Cloud,
@@ -67,8 +66,13 @@ export function Dashboard() {
   const recentWorkspaces = useMemo(() => {
     return [...workspaces]
       .sort((a, b) => {
-        const aTime = new Date(a.lastOpenedAt ?? a.updatedAt).getTime();
-        const bTime = new Date(b.lastOpenedAt ?? b.updatedAt).getTime();
+        const aTime = new Date(
+          a.lastOpenedAt ?? a.updatedAt,
+        ).getTime();
+
+        const bTime = new Date(
+          b.lastOpenedAt ?? b.updatedAt,
+        ).getTime();
 
         return bTime - aTime;
       })
@@ -119,35 +123,111 @@ export function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text-primary)] transition-colors duration-200">
-      {/* ─────────────────────────────────────────────────────────────
+    /*
+     * IMPORTANT:
+     * The dashboard is intentionally allowed to grow beyond the viewport.
+     * overflow-y-auto ensures the entire page remains scrollable even if
+     * a parent/root layout has constrained the viewport height.
+     */
+    <div
+      className="
+        min-h-screen
+        w-full
+        overflow-y-auto
+        overflow-x-hidden
+        bg-[var(--app-bg)]
+        text-[var(--text-primary)]
+        transition-colors
+        duration-200
+      "
+    >
+      {/* =========================================================
           TOP NAVIGATION
-      ───────────────────────────────────────────────────────────── */}
+      ========================================================= */}
 
-      <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-[68px] max-w-[1400px] items-center justify-between px-5 sm:px-7 lg:px-10">
+      <header
+        className="
+          sticky top-0 z-30
+          border-b border-[var(--border)]
+          bg-[var(--surface)]/95
+          backdrop-blur-xl
+        "
+      >
+        <div
+          className="
+            mx-auto flex h-[70px] max-w-[1400px]
+            items-center justify-between
+            px-5 sm:px-7 lg:px-10
+          "
+        >
           {/* Brand */}
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface-raised)]">
-              <Cloud className="h-[17px] w-[17px] text-[var(--brand-accent)]" strokeWidth={1.9} />
+            <div
+              className="
+                flex h-8 w-8 items-center justify-center
+                rounded-[8px]
+                border border-[var(--border-strong)]
+                bg-[var(--surface-raised)]
+                transition-all duration-200
+                hover:-translate-y-px
+                hover:border-[var(--brand-accent)]
+                hover:shadow-[0_8px_22px_rgba(0,0,0,0.08)]
+              "
+            >
+              <Cloud
+                className="
+                  h-[17px] w-[17px]
+                  text-[var(--brand-accent)]
+                  transition-transform duration-200
+                  hover:scale-105
+                "
+                strokeWidth={1.9}
+              />
             </div>
 
             <div className="leading-none">
-              <div className="text-[14px] font-semibold tracking-[-0.01em]">
+              <div
+                className="
+                  text-[15px]
+                  font-semibold
+                  tracking-[-0.015em]
+                "
+              >
                 Cloud IDE
               </div>
 
-              <div className="mt-1 hidden text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--text-muted)] sm:block">
+              <div
+                className="
+                  mt-1.5 hidden
+                  text-[11px]
+                  font-medium
+                  uppercase
+                  tracking-[0.14em]
+                  text-[var(--text-muted)]
+                  sm:block
+                "
+              >
                 Developer workspace
               </div>
             </div>
           </div>
 
           {/* Navigation */}
-          <nav className="hidden items-center gap-7 md:flex">
+          <nav className="hidden items-center gap-8 md:flex">
             <a
               href="#workspaces"
-              className="relative text-[12px] font-semibold text-[var(--text-primary)] transition-colors after:absolute after:-bottom-[24px] after:left-0 after:h-px after:w-full after:bg-[var(--brand-accent)]"
+              className="
+                relative
+                text-[13px] font-semibold
+                text-[var(--text-primary)]
+                transition-colors duration-200
+                after:absolute
+                after:-bottom-[25px]
+                after:left-0
+                after:h-px
+                after:w-full
+                after:bg-[var(--brand-accent)]
+              "
             >
               Workspaces
             </a>
@@ -155,10 +235,28 @@ export function Dashboard() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="group flex items-center gap-2 text-[12px] font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+              className="
+                group
+                flex items-center gap-2.5
+                text-[12px]
+                font-medium
+                text-[var(--text-secondary)]
+                transition-colors duration-200
+                hover:text-[var(--text-primary)]
+              "
               aria-label="Toggle theme"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-raised)] transition-colors group-hover:border-[var(--border-strong)]">
+              <span
+                className="
+                  flex h-7 w-7 items-center justify-center
+                  rounded-full
+                  border border-[var(--border)]
+                  bg-[var(--surface-raised)]
+                  transition-all duration-200
+                  group-hover:-translate-y-px
+                  group-hover:border-[var(--brand-accent)]
+                "
+              >
                 {theme === 'dark' ? (
                   <Sun className="h-[13px] w-[13px]" />
                 ) : (
@@ -176,35 +274,104 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="group flex items-center gap-2 rounded-[7px] bg-[var(--brand-accent)] px-4 py-2.5 text-[11px] font-semibold tracking-[0.01em] text-white shadow-[var(--shadow-sm)] transition-all duration-150 hover:bg-[var(--brand-accent-hover)] hover:-translate-y-px"
+            className="
+              group
+              flex items-center gap-2
+              rounded-[7px]
+              bg-[var(--brand-accent)]
+              px-4 py-2.5
+              text-[12px]
+              font-semibold
+              tracking-[0.005em]
+              text-white
+              shadow-[var(--shadow-sm)]
+              transition-all duration-200
+              hover:-translate-y-[1px]
+              hover:bg-[var(--brand-accent-hover)]
+              hover:shadow-[0_10px_26px_rgba(0,0,0,0.12)]
+              active:translate-y-0
+            "
           >
-            <Plus className="h-[14px] w-[14px]" strokeWidth={2.2} />
+            <Plus
+              className="
+                h-[14px] w-[14px]
+                transition-transform duration-200
+                group-hover:rotate-90
+              "
+              strokeWidth={2.2}
+            />
+
             <span>New workspace</span>
           </button>
         </div>
       </header>
 
-      {/* ─────────────────────────────────────────────────────────────
+      {/* =========================================================
           MAIN
-      ───────────────────────────────────────────────────────────── */}
+      ========================================================= */}
 
       <main
         id="workspaces"
-        className="mx-auto max-w-[1400px] px-5 py-8 sm:px-7 sm:py-10 lg:px-10 lg:py-12"
+        className="
+          mx-auto
+          w-full
+          max-w-[1400px]
+          px-5 py-9
+          sm:px-7 sm:py-11
+          lg:px-10 lg:py-14
+        "
       >
-        {/* Hero */}
-        <section className="flex flex-col justify-between gap-7 border-b border-[var(--border)] pb-8 lg:flex-row lg:items-end">
+        {/* =======================================================
+            HERO
+        ======================================================= */}
+
+        <section
+          className="
+            flex flex-col justify-between gap-8
+            border-b border-[var(--border)]
+            pb-9
+            lg:flex-row lg:items-end
+          "
+        >
           <div className="max-w-3xl">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--brand-accent)]">
-              <span className="h-px w-5 bg-[var(--brand-accent)]" />
+            <div
+              className="
+                mb-3.5
+                flex items-center gap-2.5
+                text-[11px]
+                font-semibold
+                uppercase
+                tracking-[0.17em]
+                text-[var(--brand-accent)]
+              "
+            >
+              <span className="h-px w-6 bg-[var(--brand-accent)]" />
               Workspace console
             </div>
 
-            <h1 className="text-[30px] font-semibold leading-[1.08] tracking-[-0.035em] sm:text-[38px]">
+            <h1
+              className="
+                text-[34px]
+                font-semibold
+                leading-[1.08]
+                tracking-[-0.035em]
+                sm:text-[42px]
+                lg:text-[44px]
+              "
+            >
               Your development workspace.
             </h1>
 
-            <p className="mt-4 max-w-2xl text-[13px] leading-6 text-[var(--text-secondary)] sm:text-[14px]">
+            <p
+              className="
+                mt-4
+                max-w-2xl
+                text-[14px]
+                leading-7
+                text-[var(--text-secondary)]
+                sm:text-[15px]
+              "
+            >
               Create, edit, and organize multi-language projects from the
               browser. Your workspaces persist locally and are structured for
               future cloud synchronization.
@@ -212,46 +379,115 @@ export function Dashboard() {
           </div>
 
           {/* Stats */}
-          <div className="flex shrink-0 items-center gap-7 lg:pb-1">
-            <div>
-              <div className="text-[22px] font-semibold tracking-[-0.03em] tabular-nums">
+          <div
+            className="
+              flex shrink-0 items-center gap-8
+              lg:pb-1
+            "
+          >
+            <div
+              className="
+                transition-transform duration-200
+                hover:-translate-y-0.5
+              "
+            >
+              <div
+                className="
+                  text-[25px]
+                  font-semibold
+                  tracking-[-0.03em]
+                  tabular-nums
+                "
+              >
                 {workspaces.length}
               </div>
 
-              <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+              <div
+                className="
+                  mt-1.5
+                  text-[11px]
+                  font-medium
+                  uppercase
+                  tracking-[0.11em]
+                  text-[var(--text-muted)]
+                "
+              >
                 Workspaces
               </div>
             </div>
 
-            <div className="h-8 w-px bg-[var(--border)]" />
+            <div className="h-9 w-px bg-[var(--border)]" />
 
-            <div>
-              <div className="text-[22px] font-semibold tracking-[-0.03em]">
+            <div
+              className="
+                transition-transform duration-200
+                hover:-translate-y-0.5
+              "
+            >
+              <div
+                className="
+                  text-[25px]
+                  font-semibold
+                  tracking-[-0.03em]
+                "
+              >
                 Local
               </div>
 
-              <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+              <div
+                className="
+                  mt-1.5
+                  text-[11px]
+                  font-medium
+                  uppercase
+                  tracking-[0.11em]
+                  text-[var(--text-muted)]
+                "
+              >
                 Persistence
               </div>
             </div>
           </div>
         </section>
 
-        {/* Recent workspaces */}
+        {/* =======================================================
+            RECENT WORKSPACES
+        ======================================================= */}
+
         {recentWorkspaces.length > 0 && (
-          <section className="mt-9">
-            <div className="mb-3 flex items-center justify-between">
+          <section className="mt-10">
+            <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-[12px] font-semibold tracking-[-0.01em]">
+                <h2
+                  className="
+                    text-[15px]
+                    font-semibold
+                    tracking-[-0.01em]
+                  "
+                >
                   Continue working
                 </h2>
 
-                <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                <p
+                  className="
+                    mt-1.5
+                    text-[12px]
+                    text-[var(--text-muted)]
+                  "
+                >
                   Recently opened workspaces
                 </p>
               </div>
 
-              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+              <span
+                className="
+                  text-[11px]
+                  font-medium
+                  uppercase
+                  tracking-[0.11em]
+                  text-[var(--text-muted)]
+                "
+              >
                 {recentWorkspaces.length} recent
               </span>
             </div>
@@ -262,26 +498,83 @@ export function Dashboard() {
                   key={`recent-${ws.id}`}
                   type="button"
                   onClick={() => handleOpenWorkspace(ws.id)}
-                  className="group flex min-h-[88px] items-center justify-between border border-[var(--border)] bg-[var(--surface)] px-4 py-4 text-left transition-all duration-150 hover:-translate-y-[1px] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)] hover:shadow-[var(--shadow-sm)]"
+                  className="
+                    group
+                    flex min-h-[92px]
+                    items-center justify-between
+                    border border-[var(--border)]
+                    bg-[var(--surface)]
+                    px-4 py-4
+                    text-left
+                    transition-all duration-200
+                    hover:-translate-y-[2px]
+                    hover:border-[var(--border-strong)]
+                    hover:bg-[var(--surface-hover)]
+                    hover:shadow-[0_14px_34px_rgba(0,0,0,0.10)]
+                    active:translate-y-0
+                  "
                 >
                   <div className="flex min-w-0 items-center gap-3.5">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--brand-accent)]">
-                      <FolderGit2 className="h-[15px] w-[15px]" strokeWidth={1.8} />
+                    <div
+                      className="
+                        flex h-9 w-9 shrink-0
+                        items-center justify-center
+                        rounded-[7px]
+                        border border-[var(--border)]
+                        bg-[var(--surface-raised)]
+                        text-[var(--brand-accent)]
+                        transition-all duration-200
+                        group-hover:border-[var(--brand-accent)]
+                        group-hover:-translate-y-px
+                      "
+                    >
+                      <FolderGit2
+                        className="
+                          h-[15px] w-[15px]
+                          transition-transform duration-200
+                          group-hover:scale-105
+                        "
+                        strokeWidth={1.8}
+                      />
                     </div>
 
                     <div className="min-w-0">
-                      <div className="truncate text-[12px] font-semibold">
+                      <div
+                        className="
+                          truncate
+                          text-[13px]
+                          font-semibold
+                          tracking-[-0.005em]
+                        "
+                      >
                         {ws.name}
                       </div>
 
-                      <div className="mt-1 truncate text-[10px] font-medium text-[var(--text-muted)]">
+                      <div
+                        className="
+                          mt-1.5
+                          truncate
+                          text-[11px]
+                          font-medium
+                          text-[var(--text-muted)]
+                        "
+                      >
                         {ws.language} · {ws.template}
                       </div>
                     </div>
                   </div>
 
                   <ArrowUpRight
-                    className="ml-3 h-[15px] w-[15px] shrink-0 text-[var(--text-muted)] transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[var(--brand-accent)]"
+                    className="
+                      ml-3
+                      h-[15px] w-[15px]
+                      shrink-0
+                      text-[var(--text-muted)]
+                      transition-all duration-200
+                      group-hover:-translate-y-0.5
+                      group-hover:translate-x-0.5
+                      group-hover:text-[var(--brand-accent)]
+                    "
                     strokeWidth={1.8}
                   />
                 </button>
@@ -290,13 +583,30 @@ export function Dashboard() {
           </section>
         )}
 
-        {/* Toolbar */}
-        <section className="mt-10">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        {/* =======================================================
+            TOOLBAR
+        ======================================================= */}
+
+        <section className="mt-11">
+          <div
+            className="
+              flex flex-col gap-3.5
+              lg:flex-row
+              lg:items-center
+              lg:justify-between
+            "
+          >
             {/* Search */}
-            <div className="relative w-full lg:max-w-[390px]">
+            <div className="relative w-full lg:max-w-[420px]">
               <Search
-                className="pointer-events-none absolute left-3.5 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-[var(--text-muted)]"
+                className="
+                  pointer-events-none
+                  absolute left-3.5 top-1/2
+                  h-[16px] w-[16px]
+                  -translate-y-1/2
+                  text-[var(--text-muted)]
+                  transition-colors duration-200
+                "
                 strokeWidth={1.8}
               />
 
@@ -306,14 +616,37 @@ export function Dashboard() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search workspaces..."
                 aria-label="Search workspaces"
-                className="h-10 w-full border border-[var(--border)] bg-[var(--surface)] py-2 pr-10 pl-10 text-[11px] font-medium text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] focus:border-[var(--brand-accent)]"
+                className="
+                  h-11
+                  w-full
+                  border border-[var(--border)]
+                  bg-[var(--surface)]
+                  py-2 pr-10 pl-10
+                  text-[12px]
+                  font-medium
+                  text-[var(--text-primary)]
+                  outline-none
+                  transition-all duration-200
+                  placeholder:text-[var(--text-muted)]
+                  hover:border-[var(--border-strong)]
+                  focus:border-[var(--brand-accent)]
+                  focus:shadow-[0_0_0_3px_rgba(122,81,56,0.10)]
+                "
               />
 
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  className="
+                    absolute right-3 top-1/2
+                    -translate-y-1/2
+                    text-[11px]
+                    font-medium
+                    text-[var(--text-muted)]
+                    transition-colors duration-150
+                    hover:text-[var(--text-primary)]
+                  "
                 >
                   Clear
                 </button>
@@ -321,13 +654,21 @@ export function Dashboard() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-wrap items-center gap-1 border border-[var(--border)] bg-[var(--surface)] p-1">
+            <div
+              className="
+                flex flex-wrap
+                items-center gap-1
+                border border-[var(--border)]
+                bg-[var(--surface)]
+                p-1
+              "
+            >
               <button
                 type="button"
                 onClick={() => setLanguageFilter('all')}
-                className={`px-3 py-1.5 text-[10px] font-semibold transition-colors ${
+                className={`px-3.5 py-1.5 text-[11px] font-semibold transition-all duration-150 ${
                   languageFilter === 'all'
-                    ? 'bg-[var(--brand-primary)] text-white dark:text-[var(--text-primary)]'
+                    ? 'bg-[var(--brand-primary)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.10)] dark:text-[var(--text-primary)]'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -339,9 +680,9 @@ export function Dashboard() {
                   key={lang.id}
                   type="button"
                   onClick={() => setLanguageFilter(lang.id)}
-                  className={`px-3 py-1.5 text-[10px] font-semibold transition-colors ${
+                  className={`px-3.5 py-1.5 text-[11px] font-semibold transition-all duration-150 ${
                     languageFilter === lang.id
-                      ? 'bg-[var(--brand-primary)] text-white dark:text-[var(--text-primary)]'
+                      ? 'bg-[var(--brand-primary)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.10)] dark:text-[var(--text-primary)]'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                   }`}
                 >
@@ -352,17 +693,31 @@ export function Dashboard() {
           </div>
 
           {/* Result context */}
-          <div className="mt-3 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+          <div
+            className="
+              mt-3.5
+              flex items-center justify-between
+              text-[11px]
+              text-[var(--text-muted)]
+            "
+          >
             <span>
               {filteredWorkspaces.length}{' '}
-              {filteredWorkspaces.length === 1 ? 'workspace' : 'workspaces'}
+              {filteredWorkspaces.length === 1
+                ? 'workspace'
+                : 'workspaces'}
             </span>
 
             {(searchQuery || languageFilter !== 'all') && (
               <button
                 type="button"
                 onClick={clearFilters}
-                className="font-semibold text-[var(--brand-accent)] hover:text-[var(--brand-accent-hover)]"
+                className="
+                  font-semibold
+                  text-[var(--brand-accent)]
+                  transition-colors duration-150
+                  hover:text-[var(--brand-accent-hover)]
+                "
               >
                 Reset filters
               </button>
@@ -370,16 +725,31 @@ export function Dashboard() {
           </div>
         </section>
 
-        {/* Workspace grid */}
-        <section className="mt-4">
+        {/* =======================================================
+            WORKSPACE GRID
+        ======================================================= */}
+
+        <section className="mt-5 pb-16">
           {loading && workspaces.length === 0 ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div
+              className="
+                grid grid-cols-1 gap-4
+                md:grid-cols-2
+                lg:grid-cols-3
+              "
+            >
               {[1, 2, 3].map((n) => (
                 <div
                   key={n}
-                  className="h-[190px] animate-pulse border border-[var(--border)] bg-[var(--surface)]"
+                  className="
+                    h-[190px]
+                    animate-pulse
+                    border border-[var(--border)]
+                    bg-[var(--surface)]
+                  "
                 >
                   <div className="h-1 w-full bg-[var(--surface-raised)]" />
+
                   <div className="space-y-3 p-5">
                     <div className="h-3 w-24 rounded bg-[var(--surface-raised)]" />
                     <div className="h-5 w-40 rounded bg-[var(--surface-raised)]" />
@@ -390,31 +760,97 @@ export function Dashboard() {
               ))}
             </div>
           ) : filteredWorkspaces.length === 0 ? (
-            <div className="border border-[var(--border)] bg-[var(--surface)] px-6 py-16 text-center">
-              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-raised)]">
+            <div
+              className="
+                border border-[var(--border)]
+                bg-[var(--surface)]
+                px-6 py-16
+                text-center
+                transition-all duration-200
+                hover:border-[var(--border-strong)]
+                hover:shadow-[0_12px_30px_rgba(0,0,0,0.06)]
+              "
+            >
+              <div
+                className="
+                  mx-auto
+                  flex h-11 w-11
+                  items-center justify-center
+                  rounded-full
+                  border border-[var(--border)]
+                  bg-[var(--surface-raised)]
+                  transition-all duration-200
+                  hover:-translate-y-1
+                  hover:border-[var(--brand-accent)]
+                "
+              >
                 <FolderGit2
-                  className="h-[17px] w-[17px] text-[var(--brand-accent)]"
+                  className="
+                    h-[17px] w-[17px]
+                    text-[var(--brand-accent)]
+                  "
                   strokeWidth={1.7}
                 />
               </div>
 
-              <h3 className="mt-5 text-[13px] font-semibold">
+              <h3
+                className="
+                  mt-5
+                  text-[15px]
+                  font-semibold
+                  tracking-[-0.01em]
+                "
+              >
                 No workspaces found
               </h3>
 
-              <p className="mx-auto mt-2 max-w-sm text-[11px] leading-5 text-[var(--text-muted)]">
+              <p
+                className="
+                  mx-auto mt-2.5
+                  max-w-sm
+                  text-[12px]
+                  leading-6
+                  text-[var(--text-muted)]
+                "
+              >
                 {workspaces.length === 0
                   ? 'Create your first workspace or restore the sample CloudIDE-Demo project.'
                   : 'Try adjusting your search or language filter.'}
               </p>
 
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+              <div
+                className="
+                  mt-6
+                  flex flex-wrap
+                  items-center justify-center
+                  gap-2
+                "
+              >
                 <button
                   type="button"
                   onClick={() => setCreateOpen(true)}
-                  className="flex items-center gap-2 bg-[var(--brand-accent)] px-4 py-2.5 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)]"
+                  className="
+                    group
+                    flex items-center gap-2
+                    bg-[var(--brand-accent)]
+                    px-4 py-2.5
+                    text-[11px]
+                    font-semibold
+                    text-white
+                    transition-all duration-200
+                    hover:-translate-y-px
+                    hover:bg-[var(--brand-accent-hover)]
+                    hover:shadow-[0_10px_24px_rgba(0,0,0,0.12)]
+                    active:translate-y-0
+                  "
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus
+                    className="
+                      h-3.5 w-3.5
+                      transition-transform duration-200
+                      group-hover:rotate-90
+                    "
+                  />
                   Create workspace
                 </button>
 
@@ -422,36 +858,71 @@ export function Dashboard() {
                   <button
                     type="button"
                     onClick={() => void handleRestoreDemo()}
-                    className="flex items-center gap-2 border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-[10px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                    className="
+                      group
+                      flex items-center gap-2
+                      border border-[var(--border-strong)]
+                      bg-[var(--surface)]
+                      px-4 py-2.5
+                      text-[11px]
+                      font-semibold
+                      text-[var(--text-secondary)]
+                      transition-all duration-200
+                      hover:-translate-y-px
+                      hover:border-[var(--brand-accent)]
+                      hover:bg-[var(--surface-hover)]
+                      hover:text-[var(--text-primary)]
+                      hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]
+                      active:translate-y-0
+                    "
                   >
-                    <RotateCcw className="h-3.5 w-3.5" />
+                    <RotateCcw
+                      className="
+                        h-3.5 w-3.5
+                        transition-transform duration-300
+                        group-hover:-rotate-45
+                      "
+                    />
                     Restore demo
                   </button>
                 )}
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div
+              className="
+                grid grid-cols-1 gap-4
+                md:grid-cols-2
+                lg:grid-cols-3
+              "
+            >
               {filteredWorkspaces.map((ws) => (
-                <WorkspaceCard
+                <div
                   key={ws.id}
-                  workspace={ws}
-                  onOpen={handleOpenWorkspace}
-                  onRename={(target) => {
-                    setRenameTarget(target);
-                    setRenameValue(target.name);
-                  }}
-                  onDelete={setDeleteTarget}
-                />
+                  className="
+                    transition-transform duration-200
+                    hover:-translate-y-[1px]
+                  "
+                >
+                  <WorkspaceCard
+                    workspace={ws}
+                    onOpen={handleOpenWorkspace}
+                    onRename={(target) => {
+                      setRenameTarget(target);
+                      setRenameValue(target.name);
+                    }}
+                    onDelete={setDeleteTarget}
+                  />
+                </div>
               ))}
             </div>
           )}
         </section>
       </main>
 
-      {/* ─────────────────────────────────────────────────────────────
+      {/* =========================================================
           CREATE WORKSPACE
-      ───────────────────────────────────────────────────────────── */}
+      ========================================================= */}
 
       <CreateWorkspaceModal
         open={createOpen}
@@ -462,9 +933,9 @@ export function Dashboard() {
         }}
       />
 
-      {/* ─────────────────────────────────────────────────────────────
+      {/* =========================================================
           RENAME
-      ───────────────────────────────────────────────────────────── */}
+      ========================================================= */}
 
       <Modal
         open={Boolean(renameTarget)}
@@ -482,21 +953,55 @@ export function Dashboard() {
             required
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
-            className="w-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[12px] text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--brand-accent)]"
+            className="
+              w-full
+              border border-[var(--border)]
+              bg-[var(--surface)]
+              px-3 py-2.5
+              text-[12px]
+              text-[var(--text-primary)]
+              outline-none
+              transition-all duration-200
+              placeholder:text-[var(--text-muted)]
+              hover:border-[var(--border-strong)]
+              focus:border-[var(--brand-accent)]
+              focus:shadow-[0_0_0_3px_rgba(122,81,56,0.10)]
+            "
           />
 
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setRenameTarget(null)}
-              className="border border-[var(--border-strong)] px-3.5 py-2 text-[10px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              className="
+                border border-[var(--border-strong)]
+                px-3.5 py-2
+                text-[11px]
+                font-semibold
+                text-[var(--text-secondary)]
+                transition-all duration-200
+                hover:-translate-y-px
+                hover:bg-[var(--surface-hover)]
+                hover:text-[var(--text-primary)]
+              "
             >
               Cancel
             </button>
 
             <button
               type="submit"
-              className="bg-[var(--brand-accent)] px-4 py-2 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--brand-accent-hover)]"
+              className="
+                bg-[var(--brand-accent)]
+                px-4 py-2
+                text-[11px]
+                font-semibold
+                text-white
+                transition-all duration-200
+                hover:-translate-y-px
+                hover:bg-[var(--brand-accent-hover)]
+                hover:shadow-[0_8px_20px_rgba(0,0,0,0.10)]
+                active:translate-y-0
+              "
             >
               Save name
             </button>
@@ -504,9 +1009,9 @@ export function Dashboard() {
         </form>
       </Modal>
 
-      {/* ─────────────────────────────────────────────────────────────
+      {/* =========================================================
           DELETE
-      ───────────────────────────────────────────────────────────── */}
+      ========================================================= */}
 
       <Modal
         open={Boolean(deleteTarget)}
@@ -514,7 +1019,13 @@ export function Dashboard() {
         title="Delete Workspace"
         maxWidthClass="max-w-sm"
       >
-        <p className="text-[11px] leading-5 text-[var(--text-secondary)]">
+        <p
+          className="
+            text-[12px]
+            leading-6
+            text-[var(--text-secondary)]
+          "
+        >
           Permanently delete{' '}
           <span className="font-semibold text-[var(--text-primary)]">
             {deleteTarget?.name}
@@ -527,7 +1038,17 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => setDeleteTarget(null)}
-            className="border border-[var(--border-strong)] px-3.5 py-2 text-[10px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            className="
+              border border-[var(--border-strong)]
+              px-3.5 py-2
+              text-[11px]
+              font-semibold
+              text-[var(--text-secondary)]
+              transition-all duration-200
+              hover:-translate-y-px
+              hover:bg-[var(--surface-hover)]
+              hover:text-[var(--text-primary)]
+            "
           >
             Cancel
           </button>
@@ -535,7 +1056,18 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => void handleConfirmDelete()}
-            className="bg-[#9f4b43] px-4 py-2 text-[10px] font-semibold text-white transition-colors hover:bg-[#8e4039]"
+            className="
+              bg-[#9f4b43]
+              px-4 py-2
+              text-[11px]
+              font-semibold
+              text-white
+              transition-all duration-200
+              hover:-translate-y-px
+              hover:bg-[#8e4039]
+              hover:shadow-[0_8px_20px_rgba(159,75,67,0.20)]
+              active:translate-y-0
+            "
           >
             Delete workspace
           </button>

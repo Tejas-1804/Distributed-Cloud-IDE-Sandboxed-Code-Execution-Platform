@@ -1,4 +1,8 @@
-import { ArrowUpRight, Pencil, Trash2 } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import type { Workspace } from '../../types/ide';
 import { formatRelativeTime } from '../../utils/fileTree';
 import { getLanguageMeta } from '../../utils/language';
@@ -10,67 +14,205 @@ interface WorkspaceCardProps {
   onDelete: (workspace: Workspace) => void;
 }
 
-export function WorkspaceCard({ workspace, onOpen, onRename, onDelete }: WorkspaceCardProps) {
+export function WorkspaceCard({
+  workspace,
+  onOpen,
+  onRename,
+  onDelete,
+}: WorkspaceCardProps) {
   const langMeta = getLanguageMeta(workspace.language);
 
   return (
-    <article className="flex flex-col justify-between rounded-lg border border-[#CBD5E1] bg-white p-5 transition-colors hover:border-[#94A3B8] dark:border-[#292E38] dark:bg-[#171A21] dark:hover:border-[#3F4756]">
+    <article
+      className="
+        group
+        flex min-h-[218px] flex-col justify-between
+        border
+        border-[#DED5CC]
+        bg-[#FFFEFC]
+        px-5 py-5
+        transition-[border-color,background-color,box-shadow,transform]
+        hover:-translate-y-[1px]
+        hover:border-[#B9AA9D]
+        hover:bg-[#FFFDF9]
+        hover:shadow-[0_8px_24px_rgba(72,48,32,0.07)]
+        dark:border-[#352F2A]
+        dark:bg-[#171411]
+        dark:hover:border-[#4B4037]
+        dark:hover:bg-[#1A1714]
+        dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.20)]
+      "
+    >
+      {/* Main content */}
       <div>
-        <div className="flex items-start justify-between gap-3">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
           <button
             type="button"
             onClick={() => onOpen(workspace.id)}
-            className="min-w-0 text-left text-base font-semibold tracking-tight text-[#0F172A] transition-colors hover:text-[#4F8CFF] dark:text-[#E5E7EB] dark:hover:text-[#7AA2F7]"
+            className="
+              min-w-0
+              text-left
+              outline-none
+            "
           >
-            <span className="block truncate">{workspace.name}</span>
+            <span
+              className="
+                block truncate
+                text-[15px] font-semibold
+                tracking-[-0.01em]
+                text-[#2C241F]
+                transition-colors
+                group-hover:text-[#6F4933]
+                focus-visible:underline
+                focus-visible:underline-offset-4
+                dark:text-[#EEE7E0]
+                dark:group-hover:text-[#C19773]
+              "
+            >
+              {workspace.name}
+            </span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-1">
+          {/* Card actions */}
+          <div className="flex shrink-0 items-center gap-0.5">
             <button
               type="button"
               onClick={() => onRename(workspace)}
               title="Rename workspace"
               aria-label={`Rename ${workspace.name}`}
-              className="rounded p-1.5 text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-[#9299A7] dark:hover:bg-[#222631] dark:hover:text-[#E5E7EB]"
+              className="
+                flex h-7 w-7 items-center justify-center
+                text-[#8A8077]
+                transition-[background-color,color]
+                hover:bg-[#F2ECE6]
+                hover:text-[#4F4035]
+                dark:text-[#756D66]
+                dark:hover:bg-[#25201C]
+                dark:hover:text-[#D4CBC2]
+              "
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
+
             <button
               type="button"
               onClick={() => onDelete(workspace)}
               title="Delete workspace"
               aria-label={`Delete ${workspace.name}`}
-              className="rounded p-1.5 text-[#64748B] transition-colors hover:bg-[#EF4444]/10 hover:text-[#EF4444] dark:text-[#9299A7]"
+              className="
+                flex h-7 w-7 items-center justify-center
+                text-[#8A8077]
+                transition-[background-color,color]
+                hover:bg-[#F7E9E7]
+                hover:text-[#A6493E]
+                dark:text-[#756D66]
+                dark:hover:bg-[#2A1D1B]
+                dark:hover:text-[#D9786C]
+              "
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Clean unboxed metadata with typographic separators */}
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[#475569] dark:text-[#9299A7]">
-          <span className="font-medium text-[#0F172A] dark:text-[#CBD5E1]">
+        {/* Metadata */}
+        <div
+          className="
+            mt-2.5
+            flex flex-wrap items-center gap-x-2 gap-y-1
+            text-[11px]
+            text-[#887D73]
+            dark:text-[#837971]
+          "
+        >
+          <span
+            className="
+              font-semibold
+              text-[#5F493A]
+              dark:text-[#B89B82]
+            "
+          >
             {langMeta.label}
           </span>
-          <span aria-hidden="true">·</span>
+
+          <span
+            aria-hidden="true"
+            className="text-[#C2B6AB] dark:text-[#4E453E]"
+          >
+            /
+          </span>
+
           <span>{langMeta.runtimeLabel}</span>
-          <span aria-hidden="true">·</span>
-          <span className="tabular-nums">Updated {formatRelativeTime(workspace.updatedAt)}</span>
+
+          <span
+            aria-hidden="true"
+            className="text-[#C2B6AB] dark:text-[#4E453E]"
+          >
+            /
+          </span>
+
+          <span className="tabular-nums">
+            Updated {formatRelativeTime(workspace.updatedAt)}
+          </span>
         </div>
 
-        <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-[#475569] dark:text-[#9299A7]">
-          {workspace.description}
+        {/* Description */}
+        <p
+          className="
+            mt-4
+            line-clamp-2
+            max-w-[92%]
+            text-xs leading-[1.7]
+            text-[#756A61]
+            dark:text-[#938980]
+          "
+        >
+          {workspace.description || 'No description added for this workspace.'}
         </p>
       </div>
 
-      <div className="mt-5 flex items-center justify-between border-t border-[#E2E8F0] pt-3.5 dark:border-[#292E38]">
-        <span className="font-mono text-[11px] tabular-nums text-[#64748B] dark:text-[#6B7280]">
-          Created {new Date(workspace.createdAt).toLocaleDateString()}
+      {/* Footer */}
+      <div
+        className="
+          mt-6
+          flex items-center justify-between
+          border-t
+          border-[#E7DFD7]
+          pt-3.5
+          dark:border-[#302A25]
+        "
+      >
+        <span
+          className="
+            text-[10px]
+            font-medium
+            tracking-wide
+            text-[#968B82]
+            tabular-nums
+            dark:text-[#6F675F]
+          "
+        >
+          Created{' '}
+          {new Date(workspace.createdAt).toLocaleDateString()}
         </span>
+
         <button
           type="button"
           onClick={() => onOpen(workspace.id)}
-          className="flex items-center gap-1 text-xs font-semibold text-[#2563EB] transition-colors hover:text-[#1D4ED8] dark:text-[#4F8CFF] dark:hover:text-[#7AA2F7]"
+          className="
+            inline-flex items-center gap-1.5
+            text-[11px] font-semibold
+            text-[#6F4933]
+            transition-[color,gap]
+            hover:gap-2
+            hover:text-[#503421]
+            focus-visible:outline-none
+            focus-visible:underline
+            focus-visible:underline-offset-4
+            dark:text-[#C19773]
+            dark:hover:text-[#D1AA87]
+          "
         >
           <span>Open IDE</span>
           <ArrowUpRight className="h-3.5 w-3.5" />

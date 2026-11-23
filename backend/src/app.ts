@@ -8,6 +8,7 @@ import { apiRateLimiter } from './middleware/rateLimiter.js';
 import authRoutes from './routes/authRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
+import terminalRoutes from './routes/terminalRoutes.js';
 import workspaceRoutes from './routes/workspaceRoutes.js';
 
 export interface CreateAppOptions {
@@ -56,6 +57,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use('/api/auth', authRoutes);
   app.use('/api/workspaces', workspaceRoutes);
   app.use('/api/files', fileRoutes);
+  app.use('/api/terminal', terminalRoutes);
 
   if (includeFallbackHandlers) {
     app.use(notFoundHandler);

@@ -58,23 +58,9 @@ export interface ProblemItem {
 export interface OutputLogEntry {
   id: string;
   timestamp: string;
-  source: 'IDE' | 'Editor' | 'Storage' | 'Execution';
+  source: 'IDE' | 'Editor' | 'Storage' | 'Execution' | 'Terminal';
   level: 'info' | 'success' | 'warning' | 'error';
   message: string;
-}
-
-export interface TerminalLine {
-  id: string;
-  type: 'input' | 'output' | 'error' | 'info';
-  text: string;
-}
-
-export interface TerminalSession {
-  id: string;
-  title: string;
-  cwd: string;
-  lines: TerminalLine[];
-  commandHistory: string[];
 }
 
 export interface EditorSettings {

@@ -32,6 +32,13 @@ const envSchema = z.object({
   ACCESS_TOKEN_EXPIRY: z.string().default('15m'),
   REFRESH_TOKEN_EXPIRY: z.string().default('7d'),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
+  DEV_ACCESS_MODE: z.boolean(),
+  DOCKER_SOCKET_PATH: z.string().default(''),
+  TERMINAL_MAX_SESSIONS_PER_USER: z.coerce.number().int().positive().default(6),
+  TERMINAL_MAX_SESSIONS_PER_WORKSPACE: z.coerce.number().int().positive().default(4),
+  TERMINAL_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30 * 60 * 1000),
+  TERMINAL_MAX_OUTPUT_BUFFER_BYTES: z.coerce.number().int().positive().default(262144),
+  TERMINAL_INPUT_RATE_LIMIT_PER_SEC: z.coerce.number().int().positive().default(250),
 });
 
 const rawAccessSecret = process.env.JWT_ACCESS_SECRET?.trim();
@@ -43,15 +50,45 @@ if (!isTest && (!rawAccessSecret || !rawRefreshSecret)) {
   );
 }
 
+const resolvedNodeEnv =
+  process.env.NODE_ENV === 'production'
+    ? 'production'
+    : isTest
+      ? 'test'
+      : 'development';
+
+// Development single-user access mode is strictly disabled by default in production and tests.
+// In local development, it defaults to true unless DEV_ACCESS_MODE=false is set.
+const rawDevAccessMode = process.env.DEV_ACCESS_MODE?.trim().toLowerCase();
+const devAccessMode =
+  resolvedNodeEnv === 'production'
+    ? false
+    : resolvedNodeEnv === 'test'
+      ? rawDevAccessMode === 'true'
+      : rawDevAccessMode !== 'false';
+
+if (devAccessMode && resolvedNodeEnv === 'development') {
+  console.warn(
+    '[Security] DEV_ACCESS_MODE is active for local single-user development (disabled by default in production).',
+  );
+}
+
 const parsed = envSchema.safeParse({
   PORT: process.env.PORT,
-  NODE_ENV: process.env.NODE_ENV,
+  NODE_ENV: resolvedNodeEnv,
   MONGODB_URI: process.env.MONGODB_URI?.trim() ?? '',
   JWT_ACCESS_SECRET: rawAccessSecret || fallbackAccessSecret,
   JWT_REFRESH_SECRET: rawRefreshSecret || fallbackRefreshSecret,
   ACCESS_TOKEN_EXPIRY: process.env.ACCESS_TOKEN_EXPIRY,
   REFRESH_TOKEN_EXPIRY: process.env.REFRESH_TOKEN_EXPIRY,
   FRONTEND_URL: process.env.FRONTEND_URL,
+  DEV_ACCESS_MODE: devAccessMode,
+  DOCKER_SOCKET_PATH: process.env.DOCKER_SOCKET_PATH?.trim() ?? '',
+  TERMINAL_MAX_SESSIONS_PER_USER: process.env.TERMINAL_MAX_SESSIONS_PER_USER,
+  TERMINAL_MAX_SESSIONS_PER_WORKSPACE: process.env.TERMINAL_MAX_SESSIONS_PER_WORKSPACE,
+  TERMINAL_IDLE_TIMEOUT_MS: process.env.TERMINAL_IDLE_TIMEOUT_MS,
+  TERMINAL_MAX_OUTPUT_BUFFER_BYTES: process.env.TERMINAL_MAX_OUTPUT_BUFFER_BYTES,
+  TERMINAL_INPUT_RATE_LIMIT_PER_SEC: process.env.TERMINAL_INPUT_RATE_LIMIT_PER_SEC,
 });
 
 if (!parsed.success) {

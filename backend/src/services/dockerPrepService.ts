@@ -10,45 +10,47 @@ export interface ContainerTemplateSpec {
   templateName: string;
   defaultCpuLimit: string;
   defaultMemoryMb: number;
+  defaultPidsLimit: number;
 }
 
 const LANGUAGE_TEMPLATES: Record<SupportedLanguage, ContainerTemplateSpec> = {
   python: {
-    image: 'cloud-ide/python:3.12-slim',
+    image: 'python:3.12-slim',
     templateName: 'python-3.12-sandbox',
     defaultCpuLimit: '0.5',
     defaultMemoryMb: 256,
+    defaultPidsLimit: 64,
   },
   javascript: {
-    image: 'cloud-ide/node:20-alpine',
+    image: 'node:20-alpine',
     templateName: 'node-20-sandbox',
     defaultCpuLimit: '0.5',
     defaultMemoryMb: 256,
+    defaultPidsLimit: 64,
   },
   java: {
-    image: 'cloud-ide/openjdk:21-slim',
+    image: 'eclipse-temurin:21-jdk',
     templateName: 'openjdk-21-sandbox',
     defaultCpuLimit: '1.0',
     defaultMemoryMb: 512,
+    defaultPidsLimit: 96,
   },
   c: {
-    image: 'cloud-ide/gcc:13-slim',
+    image: 'gcc:13',
     templateName: 'gcc-13-c17-sandbox',
     defaultCpuLimit: '0.5',
     defaultMemoryMb: 256,
+    defaultPidsLimit: 64,
   },
   cpp: {
-    image: 'cloud-ide/gcc:13-slim',
+    image: 'gcc:13',
     templateName: 'gpp-13-cpp20-sandbox',
     defaultCpuLimit: '0.5',
     defaultMemoryMb: 256,
+    defaultPidsLimit: 64,
   },
 };
 
-/**
- * Phase 3 Preparation Service.
- * Maps workspaces to isolated ExecutionEnvironment records without invoking Docker Engine yet.
- */
 export class DockerPrepService {
   getTemplateSpec(language: SupportedLanguage): ContainerTemplateSpec {
     return LANGUAGE_TEMPLATES[language];
@@ -64,6 +66,10 @@ export class DockerPrepService {
     if (existing) {
       existing.language = language;
       existing.environmentTemplate = spec.templateName;
+      existing.image = spec.image;
+      existing.cpuLimit = spec.defaultCpuLimit;
+      existing.memoryLimitMb = spec.defaultMemoryMb;
+      existing.pidsLimit = spec.defaultPidsLimit;
       await existing.save();
       return existing;
     }
@@ -72,6 +78,11 @@ export class DockerPrepService {
       workspaceId,
       language,
       environmentTemplate: spec.templateName,
+      image: spec.image,
+      cpuLimit: spec.defaultCpuLimit,
+      memoryLimitMb: spec.defaultMemoryMb,
+      pidsLimit: spec.defaultPidsLimit,
+      networkMode: 'none',
       status: 'pending',
     });
   }

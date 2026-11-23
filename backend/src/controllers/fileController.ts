@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { dockerService } from '../docker/docker.service.js';
 import { FileModel, type IFile } from '../models/File.js';
 import { Workspace, type IWorkspace } from '../models/Workspace.js';
 import { AppError } from '../utils/AppError.js';
@@ -175,6 +176,7 @@ export async function createFile(
 
     req.workspace.updatedAt = new Date();
     await req.workspace.save();
+    void dockerService.syncIfRunning(req.workspace._id);
 
     sendSuccess(res, 201, 'File created successfully', {
       file: serializeFile(file),
@@ -229,6 +231,7 @@ export async function createFolder(
 
     req.workspace.updatedAt = new Date();
     await req.workspace.save();
+    void dockerService.syncIfRunning(req.workspace._id);
 
     sendSuccess(res, 201, 'Folder created successfully', {
       file: serializeFile(folder),
@@ -307,6 +310,7 @@ export async function updateFileContent(
 
     workspace.updatedAt = new Date();
     await workspace.save();
+    void dockerService.syncIfRunning(workspace._id);
 
     sendSuccess(res, 200, 'File saved successfully', {
       file: serializeFile(file),
@@ -379,6 +383,7 @@ export async function renameEntry(
 
     workspace.updatedAt = new Date();
     await workspace.save();
+    void dockerService.syncIfRunning(workspace._id);
 
     sendSuccess(res, 200, 'Renamed successfully', {
       file: serializeFile(file),
@@ -420,6 +425,7 @@ export async function deleteEntry(
 
     workspace.updatedAt = new Date();
     await workspace.save();
+    void dockerService.syncIfRunning(workspace._id);
 
     sendSuccess(res, 200, 'Deleted successfully', {
       deletedIds,

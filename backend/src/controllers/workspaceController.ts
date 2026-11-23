@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { FileModel } from '../models/File.js';
 import { Workspace, type IWorkspace } from '../models/Workspace.js';
+import { dockerService } from '../docker/docker.service.js';
 import { dockerPrepService } from '../services/dockerPrepService.js';
 import { AppError } from '../utils/AppError.js';
 import { sendSuccess } from '../utils/apiResponse.js';
@@ -227,6 +228,7 @@ export async function deleteWorkspace(
     }
 
     const workspaceId = req.workspace._id;
+    await dockerService.removeWorkspaceContainer(workspaceId);
     await Promise.all([
       FileModel.deleteMany({ workspaceId }),
       dockerPrepService.removeEnvironmentRecord(workspaceId),

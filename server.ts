@@ -2,7 +2,6 @@ import express from 'express';
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
-import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,23 +15,25 @@ async function loadBackendModules() {
   // Under plain `node server.ts` in production (without tsx), load compiled backend/dist/*.js
   if (isProd && fs.existsSync(compiledAppPath)) {
     const loadDist = (rel: string) => import(pathToFileURL(path.join(distDir, rel)).href);
-    const [appMod, dbMod, envMod, jwtMod] = await Promise.all([
+    const [appMod, dbMod, envMod, socketMod, termMgrMod] = await Promise.all([
       loadDist('app.js') as Promise<typeof import('./backend/src/app.ts')>,
       loadDist('config/database.js') as Promise<typeof import('./backend/src/config/database.ts')>,
       loadDist('config/env.js') as Promise<typeof import('./backend/src/config/env.ts')>,
-      loadDist('utils/jwt.js') as Promise<typeof import('./backend/src/utils/jwt.ts')>,
+      loadDist('websocket/socket.server.js') as Promise<typeof import('./backend/src/websocket/socket.server.ts')>,
+      loadDist('terminal/terminal.manager.js') as Promise<typeof import('./backend/src/terminal/terminal.manager.ts')>,
     ]);
-    return { ...appMod, ...dbMod, ...envMod, ...jwtMod };
+    return { ...appMod, ...dbMod, ...envMod, ...socketMod, ...termMgrMod };
   }
 
   // Under `tsx server.ts` in development, load TypeScript backend modules directly
-  const [appMod, dbMod, envMod, jwtMod] = await Promise.all([
+  const [appMod, dbMod, envMod, socketMod, termMgrMod] = await Promise.all([
     import('./backend/src/app.ts'),
     import('./backend/src/config/database.ts'),
     import('./backend/src/config/env.ts'),
-    import('./backend/src/utils/jwt.ts'),
+    import('./backend/src/websocket/socket.server.ts'),
+    import('./backend/src/terminal/terminal.manager.ts'),
   ]);
-  return { ...appMod, ...dbMod, ...envMod, ...jwtMod };
+  return { ...appMod, ...dbMod, ...envMod, ...socketMod, ...termMgrMod };
 }
 
 async function startServer(): Promise<void> {
@@ -42,45 +43,15 @@ async function startServer(): Promise<void> {
     resolveAndConnectDatabase,
     disconnectDatabase,
     env,
-    verifyAccessToken,
+    initSocketServer,
+    terminalManager,
   } = await loadBackendModules();
 
   await resolveAndConnectDatabase(env.MONGODB_URI);
 
   const app = createApp({ includeFallbackHandlers: false });
   const httpServer = http.createServer(app);
-
-  // Socket.IO foundation for Phases 4 & 6
-  const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: true,
-      credentials: true,
-    },
-  });
-
-  io.use((socket, next) => {
-    const token = socket.handshake.auth?.token as string | undefined;
-    if (!token) {
-      next(new Error('Socket authentication token required'));
-      return;
-    }
-    try {
-      const payload = verifyAccessToken(token);
-      socket.data.userId = payload.sub;
-      socket.data.email = payload.email;
-      next();
-    } catch {
-      next(new Error('Invalid or expired socket authentication token'));
-    }
-  });
-
-  io.on('connection', (socket) => {
-    socket.emit('ide:ready', {
-      userId: socket.data.userId,
-      phase: 2,
-      message: 'Socket.IO foundation authenticated. Terminal & collaboration streams connect in Phases 4–6.',
-    });
-  });
+  const io = initSocketServer(httpServer);
 
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -107,6 +78,7 @@ async function startServer(): Promise<void> {
   });
 
   const shutdown = async () => {
+    await terminalManager.closeAll();
     io.close();
     httpServer.close(async () => {
       await disconnectDatabase();

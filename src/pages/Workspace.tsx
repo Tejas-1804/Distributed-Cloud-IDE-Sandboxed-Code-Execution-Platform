@@ -16,6 +16,7 @@ import { StatusBar } from '../components/layout/StatusBar';
 import { TopNavBar } from '../components/layout/TopNavBar';
 import { BottomPanel } from '../components/terminal/BottomPanel';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useTerminalStore } from '../store/useTerminalStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
 
@@ -42,6 +43,11 @@ export function Workspace() {
   } = useWorkspaceStore();
 
   const { editorSettings, updateEditorSettings, toggleTheme } = useThemeStore();
+  const terminalMaximized = useTerminalStore((s) => s.maximized);
+  const setTerminalMaximized = useTerminalStore((s) => s.setMaximized);
+  const initTerminalForWorkspace = useTerminalStore((s) => s.initForWorkspace);
+  const scheduleTerminalCleanup = useTerminalStore((s) => s.scheduleWorkspaceCleanup);
+  const createTerminalSession = useTerminalStore((s) => s.createSession);
 
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
@@ -52,6 +58,20 @@ export function Workspace() {
     if (!id) return;
     void openWorkspace(id);
   }, [id, openWorkspace]);
+
+  useEffect(() => {
+    if (!id || !activeWorkspace || activeWorkspace.id !== id) return;
+    void initTerminalForWorkspace(id);
+    return () => {
+      scheduleTerminalCleanup(id);
+    };
+  }, [id, activeWorkspace, initTerminalForWorkspace, scheduleTerminalCleanup]);
+
+  useEffect(() => {
+    if (!bottomPanelOpen && terminalMaximized) {
+      setTerminalMaximized(false);
+    }
+  }, [bottomPanelOpen, terminalMaximized, setTerminalMaximized]);
 
   const handleSaveCurrent = useCallback(async () => {
     if (!activeFileId) {
@@ -127,6 +147,16 @@ export function Workspace() {
         action: toggleBottomPanel,
       },
       {
+        id: 'new-terminal',
+        category: 'Terminal',
+        label: 'New Container Terminal Session',
+        action: () => {
+          if (!activeWorkspace) return;
+          setBottomPanelTab('terminal');
+          createTerminalSession(activeWorkspace.id);
+        },
+      },
+      {
         id: 'focus-problems',
         category: 'View',
         label: 'Show Problems Panel',
@@ -179,6 +209,8 @@ export function Workspace() {
       },
     ],
     [
+      activeWorkspace,
+      createTerminalSession,
       editorSettings.minimap,
       editorSettings.wordWrap,
       handleSaveCurrent,
@@ -250,35 +282,41 @@ export function Workspace() {
             )}
 
             <Panel id="ide-main" minSize="35%" className="min-w-0 overflow-hidden">
-              <Group orientation="vertical" className="h-full w-full">
-                <Panel id="ide-editor-area" minSize="25%" className="flex min-h-0 flex-col overflow-hidden">
-                  <EditorTabs onFormatDocument={() => formatFnRef.current?.()} />
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    <CodeEditor
-                      onOpenQuickOpen={() => setQuickOpenVisible(true)}
-                      onOpenCommandPalette={() => setCommandPaletteVisible(true)}
-                      onEditorReady={(fn) => {
-                        formatFnRef.current = fn;
-                      }}
-                    />
-                  </div>
-                </Panel>
+              {bottomPanelOpen && terminalMaximized ? (
+                <div className="h-full w-full overflow-hidden">
+                  <BottomPanel />
+                </div>
+              ) : (
+                <Group orientation="vertical" className="h-full w-full">
+                  <Panel id="ide-editor-area" minSize="25%" className="flex min-h-0 flex-col overflow-hidden">
+                    <EditorTabs onFormatDocument={() => formatFnRef.current?.()} />
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <CodeEditor
+                        onOpenQuickOpen={() => setQuickOpenVisible(true)}
+                        onOpenCommandPalette={() => setCommandPaletteVisible(true)}
+                        onEditorReady={(fn) => {
+                          formatFnRef.current = fn;
+                        }}
+                      />
+                    </div>
+                  </Panel>
 
-                {bottomPanelOpen && (
-                  <>
-                    <Separator className="h-[2px] cursor-row-resize" />
-                    <Panel
-                      id="ide-bottom-panel"
-                      defaultSize="28%"
-                      minSize={110}
-                      maxSize="70%"
-                      className="min-h-0 overflow-hidden"
-                    >
-                      <BottomPanel />
-                    </Panel>
-                  </>
-                )}
-              </Group>
+                  {bottomPanelOpen && (
+                    <>
+                      <Separator className="h-[2px] cursor-row-resize" />
+                      <Panel
+                        id="ide-bottom-panel"
+                        defaultSize="32%"
+                        minSize={130}
+                        maxSize="75%"
+                        className="min-h-0 overflow-hidden"
+                      >
+                        <BottomPanel />
+                      </Panel>
+                    </>
+                  )}
+                </Group>
+              )}
             </Panel>
           </Group>
         </div>

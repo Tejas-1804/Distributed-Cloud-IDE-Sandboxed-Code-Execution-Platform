@@ -10,8 +10,6 @@ import type {
   ProblemItem,
   StarterTemplate,
   SupportedLanguage,
-  TerminalLine,
-  TerminalSession,
   Workspace,
   WorkspaceFile,
 } from '../types/ide';
@@ -38,27 +36,6 @@ function formatTime(): string {
     minute: '2-digit',
     second: '2-digit',
   });
-}
-
-function createInitialTerminalSession(workspaceName: string): TerminalSession {
-  return {
-    id: makeId('term'),
-    title: 'local-shell',
-    cwd: `/workspace/${workspaceName}`,
-    commandHistory: [],
-    lines: [
-      {
-        id: makeId('line'),
-        type: 'info',
-        text: `Local Mock Shell (Preview) — ${workspaceName}`,
-      },
-      {
-        id: makeId('line'),
-        type: 'info',
-        text: 'Docker + node-pty streaming connects in Phases 3–4. Type "help" for local workspace commands.',
-      },
-    ],
-  };
 }
 
 interface PendingEditorJump {
@@ -93,8 +70,6 @@ interface WorkspaceState {
 
   problemsByFile: Record<string, ProblemItem[]>;
   outputLogs: OutputLogEntry[];
-  terminalSessions: TerminalSession[];
-  activeTerminalId: string | null;
 
   // Actions
   fetchWorkspaces: (query?: WorkspaceQueryParams) => Promise<void>;
@@ -144,12 +119,6 @@ interface WorkspaceState {
     message: string,
   ) => void;
   clearOutput: () => void;
-
-  // Mock Terminal (Preview until Phase 4)
-  createTerminalSession: () => void;
-  closeTerminalSession: (sessionId: string) => void;
-  setActiveTerminal: (sessionId: string) => void;
-  runTerminalCommand: (sessionId: string, rawCommand: string) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -177,8 +146,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   problemsByFile: {},
   outputLogs: [],
-  terminalSessions: [],
-  activeTerminalId: null,
 
   fetchWorkspaces: async (query) => {
     set({ loading: true, error: null });
@@ -317,8 +284,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         files.find((f) => f.type === 'file') ??
         null;
 
-      const termSession = createInitialTerminalSession(workspace.name);
-
       set({
         activeWorkspace: workspace,
         files,
@@ -330,8 +295,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         expandedFolders,
         cursorPosition: { lineNumber: 1, column: 1 },
         problemsByFile: {},
-        terminalSessions: [termSession],
-        activeTerminalId: termSession.id,
         loading: false,
         outputLogs: [
           {
@@ -367,8 +330,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       saveError: null,
       expandedFolders: {},
       problemsByFile: {},
-      terminalSessions: [],
-      activeTerminalId: null,
     });
   },
 
@@ -690,169 +651,4 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   clearOutput: () => set({ outputLogs: [] }),
-
-  createTerminalSession: () => {
-    const { activeWorkspace, terminalSessions } = get();
-    const name = activeWorkspace?.name ?? 'workspace';
-    const session: TerminalSession = {
-      ...createInitialTerminalSession(name),
-      title: `shell-${terminalSessions.length + 1}`,
-    };
-    set({
-      terminalSessions: [...terminalSessions, session],
-      activeTerminalId: session.id,
-      bottomPanelOpen: true,
-      bottomPanelTab: 'terminal',
-    });
-  },
-
-  closeTerminalSession: (sessionId) => {
-    const { terminalSessions, activeTerminalId } = get();
-    const remaining = terminalSessions.filter((s) => s.id !== sessionId);
-    if (remaining.length === 0) {
-      const fallback = createInitialTerminalSession(get().activeWorkspace?.name ?? 'workspace');
-      set({ terminalSessions: [fallback], activeTerminalId: fallback.id });
-      return;
-    }
-    const nextActive =
-      activeTerminalId === sessionId ? remaining[remaining.length - 1]?.id ?? null : activeTerminalId;
-    set({ terminalSessions: remaining, activeTerminalId: nextActive });
-  },
-
-  setActiveTerminal: (sessionId) => set({ activeTerminalId: sessionId }),
-
-  runTerminalCommand: (sessionId, rawCommand) => {
-    const trimmed = rawCommand.trim();
-    const { terminalSessions, files, activeWorkspace } = get();
-    const session = terminalSessions.find((s) => s.id === sessionId);
-    if (!session) return;
-
-    const pushLines = (newLines: TerminalLine[], clearFirst = false) => {
-      set((state) => ({
-        terminalSessions: state.terminalSessions.map((s) => {
-          if (s.id !== sessionId) return s;
-          const base = clearFirst ? [] : s.lines;
-          return {
-            ...s,
-            lines: [...base, ...newLines].slice(-300),
-            commandHistory: trimmed ? [...s.commandHistory, trimmed].slice(-50) : s.commandHistory,
-          };
-        }),
-      }));
-    };
-
-    const inputLine: TerminalLine = {
-      id: makeId('line'),
-      type: 'input',
-      text: `${session.cwd} $ ${rawCommand}`,
-    };
-
-    if (!trimmed) {
-      pushLines([inputLine]);
-      return;
-    }
-
-    const [cmd, ...args] = trimmed.split(/\s+/);
-    const argStr = args.join(' ');
-
-    if (cmd === 'clear') {
-      pushLines([], true);
-      return;
-    }
-
-    const out = (text: string, type: TerminalLine['type'] = 'output'): TerminalLine => ({
-      id: makeId('line'),
-      type,
-      text,
-    });
-
-    switch (cmd) {
-      case 'help':
-        pushLines([
-          inputLine,
-          out('Available Local Preview Shell commands:', 'info'),
-          out('  help          Show available commands'),
-          out('  ls            List workspace files and folders'),
-          out('  tree          Display workspace directory structure'),
-          out('  cat <path>    Print contents of a file in this workspace'),
-          out('  pwd           Print current workspace directory'),
-          out('  whoami        Show active workspace user'),
-          out('  date          Show current timestamp'),
-          out('  echo <text>   Print text to shell'),
-          out('  clear         Clear terminal buffer'),
-          out('Note: Live Docker + node-pty execution is scheduled for Phases 3–5.', 'info'),
-        ]);
-        break;
-
-      case 'pwd':
-        pushLines([inputLine, out(session.cwd)]);
-        break;
-
-      case 'whoami':
-        pushLines([inputLine, out('authenticated-developer (MongoDB Workspace Session)')]);
-        break;
-
-      case 'date':
-        pushLines([inputLine, out(new Date().toString())]);
-        break;
-
-      case 'echo':
-        pushLines([inputLine, out(argStr)]);
-        break;
-
-      case 'ls': {
-        const prefix = argStr ? normalizePath(argStr) : '';
-        const items = files
-          .filter((f) => f.parentPath === prefix)
-          .sort((a, b) => a.path.localeCompare(b.path))
-          .map((f) => (f.type === 'folder' ? `${f.name}/` : f.name));
-        pushLines([
-          inputLine,
-          items.length > 0 ? out(items.join('   ')) : out('(empty directory)', 'info'),
-        ]);
-        break;
-      }
-
-      case 'tree': {
-        const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));
-        if (sorted.length === 0) {
-          pushLines([inputLine, out('(empty workspace)', 'info')]);
-        } else {
-          pushLines([
-            inputLine,
-            out(`${activeWorkspace?.name ?? 'workspace'}/`),
-            ...sorted.map((f) => out(`  ${f.path}${f.type === 'folder' ? '/' : ''}`)),
-          ]);
-        }
-        break;
-      }
-
-      case 'cat': {
-        if (!argStr) {
-          pushLines([inputLine, out('Usage: cat <file-path>', 'error')]);
-          break;
-        }
-        const normalized = normalizePath(argStr);
-        const match = files.find((f) => f.type === 'file' && f.path === normalized);
-        if (!match) {
-          pushLines([inputLine, out(`cat: ${argStr}: No such file in workspace`, 'error')]);
-          break;
-        }
-        const currentContent = get().drafts[match.id] ?? match.content;
-        const lines = currentContent.split('\n').map((l) => out(l));
-        pushLines([inputLine, ...lines]);
-        break;
-      }
-
-      default:
-        pushLines([
-          inputLine,
-          out(
-            `mock-shell: "${cmd}" requires a container runtime. Docker + node-pty terminals connect in Phase 4. Run "help" for local commands.`,
-            'error',
-          ),
-        ]);
-        break;
-    }
-  },
 }));

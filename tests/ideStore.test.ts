@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '../src/services/api/client';
 import { ApiStorageAdapter } from '../src/services/storage/ApiStorageAdapter';
 import { LocalStorageAdapter } from '../src/services/storage/LocalStorageAdapter';
-import { useAuthStore } from '../src/store/useAuthStore';
+import { terminalSocket } from '../src/services/terminal/terminalSocket';
+import { useTerminalStore } from '../src/store/useTerminalStore';
 import { setStorageAdapter, useWorkspaceStore } from '../src/store/useWorkspaceStore';
 import { buildFileTree } from '../src/utils/fileTree';
 import { detectMonacoLanguage } from '../src/utils/language';
@@ -31,7 +32,7 @@ function createMemoryStorage(): Storage {
   };
 }
 
-describe('Phase 1 & Phase 2 Frontend Store & API Integration', () => {
+describe('Phase 1–4 Frontend Stores, Storage & Terminal State', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     const memoryStorage = createMemoryStorage();
@@ -56,15 +57,18 @@ describe('Phase 1 & Phase 2 Frontend Store & API Integration', () => {
       expandedFolders: {},
       problemsByFile: {},
       outputLogs: [],
-      terminalSessions: [],
-      activeTerminalId: null,
     });
-    useAuthStore.setState({
-      user: null,
-      accessToken: null,
-      initialized: false,
-      loading: false,
-      error: null,
+    useTerminalStore.setState({
+      connectionState: 'disconnected',
+      connectionError: null,
+      dockerAvailable: null,
+      dockerVersion: null,
+      dockerError: null,
+      sessions: [],
+      activeSessionId: null,
+      fontSize: 13,
+      maximized: false,
+      creating: false,
     });
   });
 
@@ -161,36 +165,7 @@ describe('Phase 1 & Phase 2 Frontend Store & API Integration', () => {
     expect(detectMonacoLanguage('README.md')).toBe('markdown');
   });
 
-  it('integrates ApiStorageAdapter and useAuthStore with REST API endpoints', async () => {
-    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValueOnce({
-      data: {
-        success: true,
-        message: 'Logged in',
-        data: {
-          user: {
-            id: 'u1',
-            name: 'Tejas',
-            email: 'tejas@cloudide.dev',
-            role: 'user',
-            createdAt: '2026-11-19T00:00:00.000Z',
-            updatedAt: '2026-11-19T00:00:00.000Z',
-          },
-          accessToken: 'jwt_access_123',
-        },
-      },
-    });
-
-    const user = await useAuthStore.getState().login({
-      email: 'tejas@cloudide.dev',
-      password: 'Password123!',
-    });
-    expect(user.email).toBe('tejas@cloudide.dev');
-    expect(useAuthStore.getState().accessToken).toBe('jwt_access_123');
-    expect(postSpy).toHaveBeenCalledWith('/auth/login', {
-      email: 'tejas@cloudide.dev',
-      password: 'Password123!',
-    });
-
+  it('integrates ApiStorageAdapter with REST API endpoints without auth UI', async () => {
     const apiAdapter = new ApiStorageAdapter();
     setStorageAdapter(apiAdapter);
 
@@ -217,5 +192,57 @@ describe('Phase 1 & Phase 2 Frontend Store & API Integration', () => {
     const saved = await apiAdapter.updateFileContent('f1', 'print("saved")');
     expect(putSpy).toHaveBeenCalledWith('/files/f1', { content: 'print("saved")' });
     expect(saved.content).toBe('print("saved")');
+  });
+
+  it('manages terminal sessions, deduplication, font size limits, maximize toggle, and cleanup', () => {
+    const connectSpy = vi.spyOn(terminalSocket, 'connect').mockImplementation(() => ({}) as never);
+    const createSpy = vi.spyOn(terminalSocket, 'createTerminal').mockImplementation(() => {});
+    const closeSpy = vi.spyOn(terminalSocket, 'closeTerminal').mockImplementation(() => {});
+
+    // Create first session
+    useTerminalStore.getState().createSession('ws_1', 100, 30);
+    expect(connectSpy).toHaveBeenCalled();
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(useTerminalStore.getState().sessions.length).toBe(1);
+
+    // Calling createSession while a pending session exists deduplicates instead of creating duplicates
+    useTerminalStore.getState().createSession('ws_1', 100, 30);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+
+    // Font size clamping & maximize state
+    useTerminalStore.getState().setFontSize(30);
+    expect(useTerminalStore.getState().fontSize).toBe(22);
+    useTerminalStore.getState().setFontSize(4);
+    expect(useTerminalStore.getState().fontSize).toBe(10);
+    useTerminalStore.getState().increaseFontSize();
+    expect(useTerminalStore.getState().fontSize).toBe(11);
+    useTerminalStore.getState().decreaseFontSize();
+    expect(useTerminalStore.getState().fontSize).toBe(10);
+
+    useTerminalStore.getState().toggleMaximized();
+    expect(useTerminalStore.getState().maximized).toBe(true);
+
+    // Cleanup removes sessions cleanly
+    useTerminalStore.setState({
+      sessions: [
+        {
+          id: 'term_server_1',
+          workspaceId: 'ws_1',
+          title: 'bash-1',
+          status: 'connected',
+          containerStatus: 'running',
+          cols: 100,
+          rows: 30,
+          scrollback: '',
+          isServerBacked: true,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      activeSessionId: 'term_server_1',
+    });
+
+    useTerminalStore.getState().cleanupWorkspaceSessions('ws_1');
+    expect(closeSpy).toHaveBeenCalledWith('term_server_1');
+    expect(useTerminalStore.getState().sessions.length).toBe(0);
   });
 });

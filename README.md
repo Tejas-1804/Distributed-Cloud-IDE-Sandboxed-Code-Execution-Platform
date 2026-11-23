@@ -1,160 +1,89 @@
 # Distributed Cloud IDE & Sandboxed Code Execution Platform
 
-**Phase 2: Backend Development, Authentication & MongoDB Workspace Persistence**
+**Phase 4: Interactive Terminal & Real-Time WebSocket Integration**
 
-A full-stack, VS Code-inspired Cloud IDE connecting the Phase 1 React + Monaco frontend to an Express.js + TypeScript + MongoDB + Mongoose backend with JWT authentication, HTTP-only refresh cookies, workspace ownership isolation, and persistent hierarchical file/folder storage.
+A full-stack, VS Code-inspired Cloud IDE combining a React + TypeScript + Monaco + xterm.js frontend with an Express.js + Socket.IO + Dockerode + MongoDB/Mongoose backend. Workspaces open directly from the Dashboard without a login wall in local development mode, while preserving backend JWT security, workspace ownership verification, and hardened Docker container isolation for interactive terminal sessions.
 
 ---
 
-## Implemented Through Phase 2
+## Implemented Through Phase 4
 
-### Frontend (React + TypeScript + Vite + Monaco)
-- **Authentication & Account Views**: `/login`, `/register`, `/profile` (profile update & password change), and `<ProtectedRoute>` session restoration via HTTP-only refresh cookies.
-- **Centralized Axios Client (`src/services/api/client.ts`)**: Bearer access-token injection, single-flight automatic 401 token refresh & retry, and normalized API error handling.
-- **Workspace Dashboard (`/`)**: MongoDB-backed workspace creation, search, language filter, sort (`Last Modified`, `Created Date`, `Name`), pagination, rename, delete, and one-click `CloudIDE-Demo` creation.
+### Frontend (`src/` — React + TypeScript + Vite + Monaco + xterm.js)
+- **Direct IDE Landing (`/`)**: Login, registration, and profile UI screens/routes have been removed. Opening the app lands directly on the Workspace Dashboard and opens `/workspace/:id` immediately.
+- **Interactive Container Terminal (`src/components/terminal/TerminalPanel.tsx`, `XtermView.tsx`)**:
+  - Real `@xterm/xterm` emulator with `@xterm/addon-fit` (`ResizeObserver` + window resize auto-fit) and `@xterm/addon-web-links`.
+  - Bidirectional Socket.IO client (`src/services/terminal/terminalSocket.ts`) with bounded exponential backoff reconnection and scrollback replay.
+  - Multi-tab terminal sessions per workspace (`useTerminalStore.ts`), font size controls (`10px–22px`, persisted in `localStorage`), clear, restart, close, maximize/restore panel, light/dark theme sync, WebSocket connection indicator, and Docker container status badge.
+  - Honest `DOCKER_UNAVAILABLE` diagnostics banner if the Docker daemon is not running (never simulates a fake shell or runs host commands).
 - **IDE Workbench (`/workspace/:id`)**:
   - Monaco Editor with multi-file tabs, unsaved-edits guard, debounced autosave (1.2s) + manual `Ctrl+S` save, live saving/synced status indicators, themes, minimap/word-wrap toggles, and real-time diagnostics (`Problems` panel).
-  - Nested File Explorer synced with MongoDB (`createFile`, `createFolder`, `renameEntry` with cascading paths, `deleteEntry`, right-click context menu).
-  - Workspace-wide Search (`Ctrl+P` quick open, `Ctrl+Shift+P` command palette, `Ctrl+B` sidebar toggle, ``Ctrl+` `` panel toggle).
-  - Clearly labeled Phase 1–2 `Local Mock Shell` preview in the Bottom Panel pending Phases 3–4 Docker + `node-pty`.
+  - Nested File Explorer synced with MongoDB (`createFile`, `createFolder`, `renameEntry` with cascading paths, `deleteEntry`, right-click context menu) and background sync into running workspace containers.
+  - Workspace-wide Search, Quick Open (`Ctrl+P`), Command Palette (`Ctrl+Shift+P`), Sidebar toggle (`Ctrl+B`), and Bottom Panel toggle (``Ctrl+` ``).
 
-### Backend (`backend/` — Express + TypeScript + Mongoose)
-- **MongoDB Models (`backend/src/models/`)**:
-  - `User` (`name`, `email` unique, `passwordHash`, `role`, `refreshTokenHash`, timestamps)
-  - `Workspace` (`ownerId`, `name`, `description`, `language`, `template`, `status`, `lastOpenedAt`, timestamps)
-  - `File` (`workspaceId`, `parentId`, `filename`, `path`, `parentPath`, `type`, `content`, `language`, timestamps)
-  - `ExecutionEnvironment` (`workspaceId`, `language`, `environmentTemplate`, `status` — Phase 3 Docker preparation)
-- **Security Middleware**: Helmet headers, CORS (`credentials: true`), rate limiting on `/api/auth/*` and `/api/*`, bcrypt password hashing (12 rounds), short-lived JWT access tokens + HTTP-only rotated refresh cookies, Zod request validation, path traversal prevention, and strict workspace ownership verification (`ownerId === req.user._id`).
-- **Socket.IO Foundation**: Authenticated Socket.IO handshake ready for Phases 4 & 6.
-
----
-
-## Project Structure
-
-```text
-distributed-cloud-ide/
-├── backend/
-│   ├── src/
-│   │   ├── config/          # env.ts (Zod env validation), database.ts (Mongoose)
-│   │   ├── controllers/     # authController, workspaceController, fileController
-│   │   ├── middleware/      # auth, workspaceOwnership, validate, rateLimiter, errorHandler
-│   │   ├── models/          # User, Workspace, File, ExecutionEnvironment
-│   │   ├── routes/          # authRoutes, workspaceRoutes, fileRoutes, healthRoutes
-│   │   ├── services/        # dockerPrepService (Phase 3 preparation)
-│   │   ├── types/           # express.d.ts
-│   │   ├── utils/           # apiResponse, AppError, jwt, pathSecurity
-│   │   ├── validators/      # authValidators, workspaceValidators, fileValidators
-│   │   ├── app.ts
-│   │   └── server.ts
-│   ├── tests/
-│   │   └── api.test.ts      # Vitest + Supertest + MongoMemoryServer integration tests
-│   ├── .env.example
-│   ├── package.json
-│   └── tsconfig.json
-├── src/                     # React + TypeScript + Vite Frontend
-│   ├── components/
-│   │   ├── auth/            # ProtectedRoute
-│   │   ├── common/          # Modal, SettingsModal, QuickOpenModal, CommandPalette
-│   │   ├── dashboard/       # CreateWorkspaceModal, WorkspaceCard
-│   │   ├── editor/          # CodeEditor (Monaco + autosave), EditorTabs
-│   │   ├── explorer/        # FileExplorer, FileTreeItem, FileIcon, SearchPanel, PlaceholderPanel
-│   │   ├── layout/          # TopNavBar, ActivityBar, StatusBar
-│   │   └── terminal/        # BottomPanel, LocalTerminal, OutputPanel, ProblemsPanel
-│   ├── hooks/               # useKeyboardShortcuts
-│   ├── pages/               # Dashboard, Workspace, Login, Register, Profile
-│   ├── services/
-│   │   ├── api/             # client.ts (Axios), types.ts
-│   │   └── storage/         # StorageAdapter, ApiStorageAdapter, LocalStorageAdapter
-│   ├── store/               # useAuthStore, useWorkspaceStore, useThemeStore
-│   ├── styles/              # monacoThemes
-│   ├── types/               # ide.ts
-│   ├── utils/               # fileTree, language, templates
-│   ├── App.tsx
-│   ├── index.css
-│   └── main.tsx
-├── tests/
-│   └── ideStore.test.ts
-├── docker-compose.yml
-├── .env.example
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
+### Backend (`backend/` — Express + Socket.IO + Dockerode + Mongoose)
+- **Docker Container Management (`backend/src/docker/`)**:
+  - `DockerService` (`docker.service.ts`) provisions isolated containers per workspace (`python:3.12-slim`, `node:20-alpine`, `eclipse-temurin:21-jdk`, `gcc:13`) with `Privileged: false`, `CapDrop: ['ALL']`, `no-new-privileges`, `NetworkMode: 'none'`, memory/CPU/PID caps, and syncs MongoDB workspace files into `/workspace` via `tar-stream`.
+  - `DockerExecDriver` (`docker.exec.ts`) attaches interactive TTY shells (`Tty: true`, `bash -i` / `sh -i`) using `container.exec` and forwards `stdin`, `stdout`/`stderr`, resize (`exec.resize`), and exit signals.
+  - **Strict Isolation**: Never executes terminal commands on the host OS. When Docker is unavailable, returns `503 DOCKER_UNAVAILABLE` / WebSocket `terminal:error`.
+- **Terminal Session Lifecycle (`backend/src/terminal/`)**:
+  - `TerminalManager` (`terminal.manager.ts`): Server-generated `term_*` session IDs, `clientRequestId` deduplication, per-user & per-workspace concurrency caps, bounded scrollback + `OUTPUT_OVERFLOW` guard, disconnect grace timer, and automatic idle session cleanup.
+  - `TerminalService` & `TerminalGateway` (`terminal.service.ts`, `terminal.gateway.ts`): Workspace ownership enforcement, Socket.IO rate limiting, Zod validation, and structured error propagation.
+- **Security & Local Development Access Mode**:
+  - Backend JWT auth (`requireAuth`), rate limiters, Helmet headers, CORS origin validation, and workspace ownership checks (`workspace-access.middleware.ts`) remain intact.
+  - **Development Access Mode (`DEV_ACCESS_MODE`)**: Enabled by default in `NODE_ENV=development` (unless `DEV_ACCESS_MODE=false`) so unauthenticated local single-user requests resolve to a local dev user (`local-dev@cloudide.local`) without login UI. **Automatically disabled in `NODE_ENV=production`**.
 
 ---
 
-## API Endpoint Summary
+## WebSocket & REST Terminal Contracts
 
-### Health
-- `GET /api/health` — Backend and MongoDB connection status
+### Socket.IO Events (`/socket.io`)
+- **Client → Server**:
+  - `terminal:create` `{ workspaceId, sessionId?, clientRequestId?, cols?, rows?, title? }`
+  - `terminal:input` `{ sessionId, data }`
+  - `terminal:resize` `{ sessionId, cols, rows }`
+  - `terminal:clear` `{ sessionId }`
+  - `terminal:restart` `{ sessionId }`
+  - `terminal:close` `{ sessionId }`
+- **Server → Client**:
+  - `ide:ready` `{ userId, phase, message }`
+  - `terminal:created` `{ session }`
+  - `terminal:reconnected` `{ session, scrollback }`
+  - `terminal:output` `{ sessionId, data }`
+  - `terminal:status` `{ sessionId, status, containerStatus, message? }`
+  - `terminal:error` `{ sessionId, code, message }`
+  - `terminal:closed` `{ sessionId, reason, exitCode }`
 
-### Authentication (`/api/auth`)
-- `POST /api/auth/register` — Register account (`name`, `email`, `password`, `confirmPassword`)
-- `POST /api/auth/login` — Login and set HTTP-only refresh cookie
-- `POST /api/auth/refresh` — Rotate refresh cookie and issue new short-lived access token
-- `POST /api/auth/logout` — Revoke refresh token hash and clear cookie
-- `GET /api/auth/me` — Get authenticated user profile (protected)
-- `PUT /api/auth/profile` — Update name/email (protected)
-- `PUT /api/auth/change-password` — Change password with current password check (protected)
-
-### Workspaces (`/api/workspaces` — all protected & ownership-checked)
-- `POST /api/workspaces` — Create workspace + starter template files + `ExecutionEnvironment`
-- `GET /api/workspaces` — List owned workspaces (`search`, `language`, `sortBy`, `sortOrder`, `page`, `limit`)
-- `GET /api/workspaces/:id` — Get workspace details
-- `PUT /api/workspaces/:id` — Update workspace name, description, language, or status
-- `DELETE /api/workspaces/:id` — Delete workspace, files, and execution environment
-
-### Files & Folders (all protected & ownership-checked)
-- `POST /api/workspaces/:id/files` — Create file
-- `POST /api/workspaces/:id/folders` — Create folder
-- `GET /api/workspaces/:id/files` — List flat `files[]` and nested `tree[]`
-- `GET /api/files/:fileId` — Get file details and content
-- `PUT /api/files/:fileId` — Save file content
-- `PATCH /api/files/:fileId/rename` — Rename file or folder (cascades nested paths)
-- `DELETE /api/files/:fileId` — Delete file or folder and all descendants
+### Terminal REST Endpoints (`/api/terminal`)
+- `GET /api/terminal/health` — Docker Engine availability, version/error, active session count, optional workspace container status
+- `POST /api/terminal/sessions` — Create terminal session via REST (returns `503 DOCKER_UNAVAILABLE` if Docker daemon is offline)
+- `GET /api/terminal/sessions/:sessionId` — Retrieve active session status (owner-checked)
+- `DELETE /api/terminal/sessions/:sessionId` — Close active terminal session (owner-checked)
 
 ---
 
-## Local Setup (Windows PowerShell in VS Code)
+## Local Setup & Verification
 
 ### Prerequisites
 - Node.js 20+
-- Local MongoDB Community Server (or Docker / MongoDB Atlas URI)
+- Docker Desktop / Docker Engine running locally for live container shells
+- MongoDB (local service, Docker Compose `mongodb`, or embedded `MongoMemoryServer` fallback when `MONGODB_URI` is unset in dev)
 
-### 1. Start MongoDB (optional via Docker Compose)
-```powershell
-docker compose up -d mongodb
-```
-
-### 2. Configure & Start Backend (`http://localhost:4000`)
-```powershell
-cd backend
-Copy-Item .env.example .env
+### Start Unified Dev Server (`http://localhost:3000`)
+```bash
 npm install
+npm --prefix backend install
 npm run dev
 ```
 
-### 3. Configure & Start Frontend (`http://localhost:3000`)
-Open a second PowerShell terminal in the project root:
-```powershell
-npm install
-npm run dev
-```
+### Verification Commands
+```bash
+# Backend checks & tests
+npm --prefix backend run typecheck
+npm --prefix backend run build
+npm --prefix backend test
 
-Vite automatically proxies `/api` and `/socket.io` requests to `http://localhost:4000`.
-
-### Verification Commands (Windows PowerShell)
-
-```powershell
-# Backend checks & integration tests (uses in-memory MongoDB)
-cd backend
-npm run typecheck
-npm test
-npm run build
-
-# Frontend checks & unit tests (from project root)
-cd ..
-npm run typecheck
+# Frontend checks & tests
+npm run lint
 npm test
 npm run build
 ```

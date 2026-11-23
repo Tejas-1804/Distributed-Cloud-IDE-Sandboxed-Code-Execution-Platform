@@ -2,5 +2,7 @@
   "name": "Cloud IDE",
   "description": "Distributed Cloud IDE and sandboxed code execution platform workspace.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

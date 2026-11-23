@@ -72,7 +72,7 @@ export interface EditorSettings {
   formatOnSave: boolean;
 }
 
-export type ActivityView = 'explorer' | 'search' | 'source-control' | 'extensions';
+export type ActivityView = 'explorer' | 'search' | 'environment' | 'source-control' | 'extensions';
 
 export type BottomPanelTab = 'terminal' | 'output' | 'problems';
 

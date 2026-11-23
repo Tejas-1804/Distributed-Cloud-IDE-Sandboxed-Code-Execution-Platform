@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CommandPalette, type PaletteCommand } from '../components/common/CommandPalette';
 import { QuickOpenModal } from '../components/common/QuickOpenModal';
 import { SettingsModal } from '../components/common/SettingsModal';
+import { EnvironmentPanel } from '../components/containers/EnvironmentPanel';
 import { CodeEditor } from '../components/editor/CodeEditor';
 import { EditorTabs } from '../components/editor/EditorTabs';
 import { FileExplorer } from '../components/explorer/FileExplorer';
@@ -16,6 +17,7 @@ import { StatusBar } from '../components/layout/StatusBar';
 import { TopNavBar } from '../components/layout/TopNavBar';
 import { BottomPanel } from '../components/terminal/BottomPanel';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useContainerStore } from '../store/useContainerStore';
 import { useTerminalStore } from '../store/useTerminalStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
@@ -39,10 +41,14 @@ export function Workspace() {
     saveAllFiles,
     toggleSidebar,
     toggleBottomPanel,
+    setActivityView,
     setBottomPanelTab,
   } = useWorkspaceStore();
 
   const { editorSettings, updateEditorSettings, toggleTheme } = useThemeStore();
+  const fetchContainerStatus = useContainerStore((s) => s.fetchStatus);
+  const startContainer = useContainerStore((s) => s.startContainer);
+  const stopContainer = useContainerStore((s) => s.stopContainer);
   const terminalMaximized = useTerminalStore((s) => s.maximized);
   const setTerminalMaximized = useTerminalStore((s) => s.setMaximized);
   const initTerminalForWorkspace = useTerminalStore((s) => s.initForWorkspace);
@@ -61,11 +67,12 @@ export function Workspace() {
 
   useEffect(() => {
     if (!id || !activeWorkspace || activeWorkspace.id !== id) return;
+    void fetchContainerStatus(id);
     void initTerminalForWorkspace(id);
     return () => {
       scheduleTerminalCleanup(id);
     };
-  }, [id, activeWorkspace, initTerminalForWorkspace, scheduleTerminalCleanup]);
+  }, [id, activeWorkspace, fetchContainerStatus, initTerminalForWorkspace, scheduleTerminalCleanup]);
 
   useEffect(() => {
     if (!bottomPanelOpen && terminalMaximized) {
@@ -157,6 +164,28 @@ export function Workspace() {
         },
       },
       {
+        id: 'open-environment',
+        category: 'Container',
+        label: 'Open Container Environment Panel',
+        action: () => setActivityView('environment'),
+      },
+      {
+        id: 'start-container',
+        category: 'Container',
+        label: 'Start Workspace Container',
+        action: () => {
+          if (activeWorkspace) void startContainer(activeWorkspace.id);
+        },
+      },
+      {
+        id: 'stop-container',
+        category: 'Container',
+        label: 'Stop Workspace Container',
+        action: () => {
+          if (activeWorkspace) void stopContainer(activeWorkspace.id);
+        },
+      },
+      {
         id: 'focus-problems',
         category: 'View',
         label: 'Show Problems Panel',
@@ -216,7 +245,10 @@ export function Workspace() {
       handleSaveCurrent,
       navigate,
       saveAllFiles,
+      setActivityView,
       setBottomPanelTab,
+      startContainer,
+      stopContainer,
       toggleBottomPanel,
       toggleSidebar,
       toggleTheme,
@@ -274,6 +306,7 @@ export function Workspace() {
                 >
                   {activityView === 'explorer' && <FileExplorer />}
                   {activityView === 'search' && <SearchPanel />}
+                  {activityView === 'environment' && <EnvironmentPanel />}
                   {activityView === 'source-control' && <SourceControlPanel />}
                   {activityView === 'extensions' && <ExtensionsPanel />}
                 </Panel>

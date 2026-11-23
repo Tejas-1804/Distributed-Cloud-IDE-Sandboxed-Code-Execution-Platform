@@ -15,25 +15,27 @@ async function loadBackendModules() {
   // Under plain `node server.ts` in production (without tsx), load compiled backend/dist/*.js
   if (isProd && fs.existsSync(compiledAppPath)) {
     const loadDist = (rel: string) => import(pathToFileURL(path.join(distDir, rel)).href);
-    const [appMod, dbMod, envMod, socketMod, termMgrMod] = await Promise.all([
+    const [appMod, dbMod, envMod, socketMod, termMgrMod, cleanupMod] = await Promise.all([
       loadDist('app.js') as Promise<typeof import('./backend/src/app.ts')>,
       loadDist('config/database.js') as Promise<typeof import('./backend/src/config/database.ts')>,
       loadDist('config/env.js') as Promise<typeof import('./backend/src/config/env.ts')>,
       loadDist('websocket/socket.server.js') as Promise<typeof import('./backend/src/websocket/socket.server.ts')>,
       loadDist('terminal/terminal.manager.js') as Promise<typeof import('./backend/src/terminal/terminal.manager.ts')>,
+      loadDist('docker/container.cleanup.js') as Promise<typeof import('./backend/src/docker/container.cleanup.ts')>,
     ]);
-    return { ...appMod, ...dbMod, ...envMod, ...socketMod, ...termMgrMod };
+    return { ...appMod, ...dbMod, ...envMod, ...socketMod, ...termMgrMod, ...cleanupMod };
   }
 
   // Under `tsx server.ts` in development, load TypeScript backend modules directly
-  const [appMod, dbMod, envMod, socketMod, termMgrMod] = await Promise.all([
+  const [appMod, dbMod, envMod, socketMod, termMgrMod, cleanupMod] = await Promise.all([
     import('./backend/src/app.ts'),
     import('./backend/src/config/database.ts'),
     import('./backend/src/config/env.ts'),
     import('./backend/src/websocket/socket.server.ts'),
     import('./backend/src/terminal/terminal.manager.ts'),
+    import('./backend/src/docker/container.cleanup.ts'),
   ]);
-  return { ...appMod, ...dbMod, ...envMod, ...socketMod, ...termMgrMod };
+  return { ...appMod, ...dbMod, ...envMod, ...socketMod, ...termMgrMod, ...cleanupMod };
 }
 
 async function startServer(): Promise<void> {
@@ -45,6 +47,8 @@ async function startServer(): Promise<void> {
     env,
     initSocketServer,
     terminalManager,
+    startContainerCleanupScheduler,
+    stopContainerCleanupScheduler,
   } = await loadBackendModules();
 
   await resolveAndConnectDatabase(env.MONGODB_URI);
@@ -52,6 +56,7 @@ async function startServer(): Promise<void> {
   const app = createApp({ includeFallbackHandlers: false });
   const httpServer = http.createServer(app);
   const io = initSocketServer(httpServer);
+  startContainerCleanupScheduler();
 
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -78,6 +83,7 @@ async function startServer(): Promise<void> {
   });
 
   const shutdown = async () => {
+    stopContainerCleanupScheduler();
     await terminalManager.closeAll();
     io.close();
     httpServer.close(async () => {

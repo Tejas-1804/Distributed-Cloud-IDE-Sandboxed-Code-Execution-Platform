@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
 import authRoutes from './routes/authRoutes.js';
+import containerRoutes from './routes/containerRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import terminalRoutes from './routes/terminalRoutes.js';
@@ -57,6 +58,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use('/api/auth', authRoutes);
   app.use('/api/workspaces', workspaceRoutes);
   app.use('/api/files', fileRoutes);
+  app.use('/api/containers', containerRoutes);
   app.use('/api/terminal', terminalRoutes);
 
   if (includeFallbackHandlers) {

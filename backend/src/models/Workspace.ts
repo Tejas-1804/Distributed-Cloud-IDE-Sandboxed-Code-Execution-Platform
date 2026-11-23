@@ -1,5 +1,6 @@
 import mongoose, { type Document, Schema } from 'mongoose';
 import type { StarterTemplate, SupportedLanguage } from '../utils/pathSecurity.js';
+import type { ExecutionContainerStatus } from './ExecutionEnvironment.js';
 
 export interface IWorkspace extends Document {
   _id: mongoose.Types.ObjectId;
@@ -9,6 +10,12 @@ export interface IWorkspace extends Document {
   language: SupportedLanguage;
   template: StarterTemplate;
   status: 'active' | 'archived';
+  containerId?: string | null;
+  containerName?: string | null;
+  containerStatus?: ExecutionContainerStatus;
+  environmentTemplate?: string;
+  lastStartedAt?: Date;
+  lastStoppedAt?: Date;
   lastOpenedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +59,29 @@ const workspaceSchema = new Schema<IWorkspace>(
       enum: ['active', 'archived'],
       default: 'active',
     },
+    containerId: {
+      type: String,
+      default: null,
+    },
+    containerName: {
+      type: String,
+      default: null,
+    },
+    containerStatus: {
+      type: String,
+      enum: ['pending', 'creating', 'running', 'ready', 'stopped', 'error', 'removed'],
+      default: 'pending',
+    },
+    environmentTemplate: {
+      type: String,
+      default: '',
+    },
+    lastStartedAt: {
+      type: Date,
+    },
+    lastStoppedAt: {
+      type: Date,
+    },
     lastOpenedAt: {
       type: Date,
     },
@@ -60,6 +90,8 @@ const workspaceSchema = new Schema<IWorkspace>(
     timestamps: true,
     toJSON: {
       transform: (_doc, ret: Record<string, unknown>) => {
+        delete ret.containerId;
+        delete ret.containerName;
         delete ret.__v;
         return ret;
       },

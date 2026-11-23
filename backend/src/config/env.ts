@@ -39,6 +39,13 @@ const envSchema = z.object({
   TERMINAL_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30 * 60 * 1000),
   TERMINAL_MAX_OUTPUT_BUFFER_BYTES: z.coerce.number().int().positive().default(262144),
   TERMINAL_INPUT_RATE_LIMIT_PER_SEC: z.coerce.number().int().positive().default(250),
+  CONTAINER_MEMORY_LIMIT_MB: z.coerce.number().int().min(64).max(4096).default(256),
+  CONTAINER_CPU_LIMIT: z.coerce.number().min(0.1).max(8).default(0.5),
+  CONTAINER_PIDS_LIMIT: z.coerce.number().int().min(16).max(512).default(64),
+  CONTAINER_MAX_ACTIVE: z.coerce.number().int().min(1).max(200).default(10),
+  CONTAINER_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
+  CONTAINER_NETWORK_MODE: z.string().default('none'),
+  CONTAINER_READONLY_ROOTFS: z.boolean().default(false),
 });
 
 const rawAccessSecret = process.env.JWT_ACCESS_SECRET?.trim();
@@ -89,6 +96,14 @@ const parsed = envSchema.safeParse({
   TERMINAL_IDLE_TIMEOUT_MS: process.env.TERMINAL_IDLE_TIMEOUT_MS,
   TERMINAL_MAX_OUTPUT_BUFFER_BYTES: process.env.TERMINAL_MAX_OUTPUT_BUFFER_BYTES,
   TERMINAL_INPUT_RATE_LIMIT_PER_SEC: process.env.TERMINAL_INPUT_RATE_LIMIT_PER_SEC,
+  CONTAINER_MEMORY_LIMIT_MB: process.env.CONTAINER_MEMORY_LIMIT_MB,
+  CONTAINER_CPU_LIMIT: process.env.CONTAINER_CPU_LIMIT,
+  CONTAINER_PIDS_LIMIT: process.env.CONTAINER_PIDS_LIMIT,
+  CONTAINER_MAX_ACTIVE: process.env.CONTAINER_MAX_ACTIVE,
+  CONTAINER_IDLE_TIMEOUT_MS: process.env.CONTAINER_IDLE_TIMEOUT_MS,
+  CONTAINER_NETWORK_MODE: process.env.CONTAINER_NETWORK_MODE?.trim() || 'none',
+  CONTAINER_READONLY_ROOTFS:
+    process.env.CONTAINER_READONLY_ROOTFS?.trim().toLowerCase() === 'true',
 });
 
 if (!parsed.success) {

@@ -1,4 +1,4 @@
-import { Blocks, Files, GitBranch, Search, Settings } from 'lucide-react';
+import { Blocks, Box, Files, GitBranch, Search, Settings } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import type { ActivityView } from '../../types/ide';
 
@@ -9,6 +9,7 @@ interface ActivityBarProps {
 const ACTIVITIES: { id: ActivityView; label: string; icon: typeof Files }[] = [
   { id: 'explorer', label: 'Explorer (Ctrl+B)', icon: Files },
   { id: 'search', label: 'Search Workspace', icon: Search },
+  { id: 'environment', label: 'Container Environment', icon: Box },
   { id: 'source-control', label: 'Source Control', icon: GitBranch },
   { id: 'extensions', label: 'Extensions & Runtimes', icon: Blocks },
 ];

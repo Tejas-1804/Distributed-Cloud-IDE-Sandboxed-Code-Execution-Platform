@@ -1,0 +1,40 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "architectures": [
+    "SCMP_ARCH_X86_64",
+    "SCMP_ARCH_X86",
+    "SCMP_ARCH_AARCH64"
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "read", "write", "open", "openat", "close", "stat", "fstat", "lstat",
+        "newfstatat", "statx", "poll", "ppoll", "lseek", "mmap", "mprotect",
+        "munmap", "brk", "rt_sigaction", "rt_sigprocmask", "rt_sigreturn",
+        "ioctl", "pread64", "pwrite64", "readv", "writev", "access", "faccessat",
+        "pipe", "pipe2", "select", "pselect6", "sched_yield", "mremap", "msync",
+        "mincore", "madvise", "dup", "dup2", "dup3", "pause", "nanosleep",
+        "clock_nanosleep", "getitimer", "alarm", "setitimer", "getpid",
+        "sendfile", "socket", "connect", "accept", "accept4", "sendto",
+        "recvfrom", "sendmsg", "recvmsg", "shutdown", "bind", "listen",
+        "getsockname", "getpeername", "socketpair", "setsockopt", "getsockopt",
+        "clone", "clone3", "fork", "vfork", "execve", "execveat", "exit",
+        "wait4", "waitid", "kill", "tgkill", "tkill", "uname", "fcntl", "flock",
+        "fsync", "fdatasync", "truncate", "ftruncate", "getdents", "getdents64",
+        "getcwd", "chdir", "fchdir", "rename", "renameat", "renameat2",
+        "mkdir", "mkdirat", "rmdir", "link", "linkat", "unlink", "unlinkat",
+        "symlink", "symlinkat", "readlink", "readlinkat", "chmod", "fchmod",
+        "fchmodat", "umask", "gettimeofday", "clock_gettime", "clock_getres",
+        "getrlimit", "setrlimit", "prlimit64", "getrusage", "sysinfo", "times",
+        "getuid", "getgid", "geteuid", "getegid", "getppid", "getpgrp",
+        "setsid", "setpgid", "getpgid", "getgroups", "setgroups",
+        "sigaltstack", "utime", "utimes", "utimensat", "futimens", "arch_prctl",
+        "set_tid_address", "set_robust_list", "get_robust_list", "futex",
+        "epoll_create", "epoll_create1", "epoll_ctl", "epoll_wait",
+        "epoll_pwait", "eventfd", "eventfd2", "exit_group", "getrandom",
+        "rseq", "memfd_create", "copy_file_range", "prctl"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}

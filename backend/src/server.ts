@@ -2,6 +2,10 @@ import http from 'http';
 import { createApp } from './app.js';
 import { disconnectDatabase, resolveAndConnectDatabase } from './config/database.js';
 import { env } from './config/env.js';
+import {
+  startContainerCleanupScheduler,
+  stopContainerCleanupScheduler,
+} from './docker/container.cleanup.js';
 import { terminalManager } from './terminal/terminal.manager.js';
 import { initSocketServer } from './websocket/socket.server.js';
 
@@ -11,6 +15,7 @@ async function bootstrap(): Promise<void> {
   const app = createApp();
   const httpServer = http.createServer(app);
   const io = initSocketServer(httpServer);
+  startContainerCleanupScheduler();
 
   httpServer.listen(env.PORT, () => {
     console.log(`[Backend] Express + Socket.IO server listening on http://localhost:${env.PORT}`);
@@ -18,6 +23,7 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = async () => {
     console.log('\n[Backend] Shutting down gracefully...');
+    stopContainerCleanupScheduler();
     await terminalManager.closeAll();
     io.close();
     httpServer.close(async () => {

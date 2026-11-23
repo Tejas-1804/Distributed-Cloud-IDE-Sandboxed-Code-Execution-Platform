@@ -24,6 +24,7 @@ export interface IExecutionEnvironment extends Document {
   networkMode?: string;
   status: ExecutionContainerStatus;
   lastStartedAt?: Date;
+  lastStoppedAt?: Date;
   lastError?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -80,6 +81,9 @@ const executionEnvironmentSchema = new Schema<IExecutionEnvironment>(
       default: 'pending',
     },
     lastStartedAt: {
+      type: Date,
+    },
+    lastStoppedAt: {
       type: Date,
     },
     lastError: {

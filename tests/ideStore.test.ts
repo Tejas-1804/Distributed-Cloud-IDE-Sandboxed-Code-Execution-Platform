@@ -245,4 +245,72 @@ describe('Phase 1–4 Frontend Stores, Storage & Terminal State', () => {
     expect(closeSpy).toHaveBeenCalledWith('term_server_1');
     expect(useTerminalStore.getState().sessions.length).toBe(0);
   });
+
+  it('manages Phase 3 container status, lifecycle actions, logs, and errors in useContainerStore', async () => {
+    const { containerApi } = await import('../src/services/container/containerApi');
+    const { useContainerStore } = await import('../src/store/useContainerStore');
+
+    useContainerStore.setState({
+      statusByWorkspace: {},
+      logsByWorkspace: {},
+      loadingByWorkspace: {},
+      actionPendingByWorkspace: {},
+      errorByWorkspace: {},
+      allContainers: [],
+      dockerAvailable: null,
+    });
+
+    const baseStatus = {
+      workspaceId: 'ws_c3',
+      containerStatus: 'ready' as const,
+      dockerAvailable: true,
+      language: 'python',
+      environmentTemplate: 'python-3.12-sandbox',
+      image: 'cloudide-sandbox-python:3.12',
+      limits: {
+        memoryLimitMb: 256,
+        cpuLimit: '0.5',
+        pidsLimit: 64,
+        networkMode: 'none',
+        readonlyRootfs: false,
+      },
+    };
+
+    const createSpy = vi.spyOn(containerApi, 'createContainer').mockResolvedValueOnce(baseStatus);
+    const startSpy = vi
+      .spyOn(containerApi, 'startContainer')
+      .mockResolvedValueOnce({ ...baseStatus, containerStatus: 'running' });
+    const logsSpy = vi.spyOn(containerApi, 'getLogs').mockResolvedValueOnce({
+      workspaceId: 'ws_c3',
+      containerStatus: 'running',
+      logs: 'container booted\n',
+      tail: 200,
+    });
+    const stopSpy = vi
+      .spyOn(containerApi, 'stopContainer')
+      .mockRejectedValueOnce(new Error('Docker daemon unavailable'));
+
+    const created = await useContainerStore.getState().createContainer('ws_c3', false);
+    expect(createSpy).toHaveBeenCalledWith('ws_c3', false);
+    expect(created?.containerStatus).toBe('ready');
+    expect(useContainerStore.getState().statusByWorkspace['ws_c3']?.image).toBe(
+      'cloudide-sandbox-python:3.12',
+    );
+
+    const started = await useContainerStore.getState().startContainer('ws_c3');
+    expect(startSpy).toHaveBeenCalledWith('ws_c3');
+    expect(started?.containerStatus).toBe('running');
+
+    const logs = await useContainerStore.getState().fetchLogs('ws_c3', 200);
+    expect(logsSpy).toHaveBeenCalledWith('ws_c3', 200);
+    expect(logs).toContain('container booted');
+
+    const failedStop = await useContainerStore.getState().stopContainer('ws_c3');
+    expect(stopSpy).toHaveBeenCalledWith('ws_c3');
+    expect(failedStop).toBeNull();
+    expect(useContainerStore.getState().errorByWorkspace['ws_c3']).toBe(
+      'Docker daemon unavailable',
+    );
+    expect(useContainerStore.getState().actionPendingByWorkspace['ws_c3']).toBeNull();
+  });
 });

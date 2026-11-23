@@ -40,3 +40,26 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
     next();
   };
 }
+
+export function validateParams<T>(schema: ZodSchema<T>) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const result = schema.safeParse(req.params);
+    if (!result.success) {
+      const issues = result.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      }));
+      next(
+        new AppError(
+          400,
+          issues[0]?.message ?? 'Invalid route parameters',
+          'VALIDATION_ERROR',
+          issues,
+        ),
+      );
+      return;
+    }
+    req.params = result.data as unknown as Request['params'];
+    next();
+  };
+}

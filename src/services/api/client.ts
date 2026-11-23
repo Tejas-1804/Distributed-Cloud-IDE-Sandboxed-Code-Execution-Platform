@@ -15,8 +15,7 @@ export interface ApiErrorResponse {
   };
 }
 
-export const API_BASE_URL =
-  (import.meta.env.VITE_API_URL as string | undefined)?.trim() || '/api';
+export const API_BASE_URL = '/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

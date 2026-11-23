@@ -234,6 +234,19 @@ export function Dashboard() {
 
             <button
               type="button"
+              onClick={() => navigate('/monitoring')}
+              className="
+                text-[13px] font-medium
+                text-[var(--text-secondary)]
+                transition-colors duration-200
+                hover:text-[var(--text-primary)]
+              "
+            >
+              Monitoring
+            </button>
+
+            <button
+              type="button"
               onClick={toggleTheme}
               className="
                 group

@@ -19,7 +19,12 @@ export async function resolveAuthorizedWorkspace(
   const ownerCheckId =
     typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
 
-  if (!workspace.ownerId.equals(ownerCheckId)) {
+  const isOwner = workspace.ownerId.equals(ownerCheckId);
+  const isCollaborator =
+    Array.isArray(workspace.collaboratorIds) &&
+    workspace.collaboratorIds.some((cid) => cid.equals(ownerCheckId));
+
+  if (!isOwner && !isCollaborator) {
     throw new AppError(
       403,
       'You do not have permission to access this workspace',

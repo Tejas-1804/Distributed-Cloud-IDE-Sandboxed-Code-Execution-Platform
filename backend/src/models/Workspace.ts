@@ -5,6 +5,7 @@ import type { ExecutionContainerStatus } from './ExecutionEnvironment.js';
 export interface IWorkspace extends Document {
   _id: mongoose.Types.ObjectId;
   ownerId: mongoose.Types.ObjectId;
+  collaboratorIds?: mongoose.Types.ObjectId[];
   name: string;
   description: string;
   language: SupportedLanguage;
@@ -28,6 +29,11 @@ const workspaceSchema = new Schema<IWorkspace>(
       ref: 'User',
       required: true,
       index: true,
+    },
+    collaboratorIds: {
+      type: [Schema.Types.ObjectId],
+      ref: 'User',
+      default: [],
     },
     name: {
       type: String,

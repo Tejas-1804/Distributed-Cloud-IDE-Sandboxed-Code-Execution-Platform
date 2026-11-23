@@ -251,6 +251,10 @@ class TerminalSocketClient {
     this.socket.emit('terminal:clear', { sessionId });
   }
 
+  getSharedSocket(): Socket {
+    return this.connect() as unknown as Socket;
+  }
+
   async checkHealth(workspaceId?: string): Promise<TerminalHealthResponse> {
     const res = await apiClient.get<ApiSuccessResponse<TerminalHealthResponse>>(
       '/terminal/health',

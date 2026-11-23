@@ -1,11 +1,14 @@
-import { AlertCircle, AlertTriangle, Box, Database, GitBranch, Loader2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Box, Database, GitBranch, Loader2, Users, WifiOff } from 'lucide-react';
 import { useMemo } from 'react';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useCollabStore } from '../../store/useCollabStore';
 import { useContainerStore } from '../../store/useContainerStore';
 import { useThemeStore } from '../../store/useThemeStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { getMonacoLanguageLabel } from '../../utils/language';
 
 export function StatusBar() {
+  const isOnline = useOnlineStatus();
   const {
     activeWorkspace,
     files,
@@ -18,6 +21,7 @@ export function StatusBar() {
     setBottomPanelTab,
   } = useWorkspaceStore();
   const { editorSettings } = useThemeStore();
+  const { status: collabStatus, peers } = useCollabStore();
   const containerStatusInfo = useContainerStore((s) =>
     activeWorkspace ? s.statusByWorkspace[activeWorkspace.id] : undefined,
   );
@@ -92,6 +96,16 @@ export function StatusBar() {
             <span>{warnings}</span>
           </span>
         </button>
+
+        <span
+          className="hidden items-center gap-1 sm:flex"
+          title={`Yjs collaboration (${collabStatus})`}
+        >
+          <Users className={`h-3 w-3 ${collabStatus === 'synced' ? 'text-[#16A34A] dark:text-[#4ADE80]' : ''}`} />
+          <span className="tabular-nums">
+            {collabStatus === 'synced' ? `${peers.length || 1} Live` : 'Collab'}
+          </span>
+        </span>
       </div>
 
       {/* Right Status Items */}
@@ -113,9 +127,14 @@ export function StatusBar() {
 
         <span
           className="flex items-center gap-1"
-          title="Persisted in MongoDB via Express API"
+          title={isOnline ? 'Persisted in MongoDB via Express API' : 'Offline — queuing edits locally'}
         >
-          {isSaving ? (
+          {!isOnline ? (
+            <>
+              <WifiOff className="h-3 w-3 text-[#F59E0B]" />
+              <span className="hidden text-[#D97706] dark:text-[#FBBF24] sm:inline">Offline</span>
+            </>
+          ) : isSaving ? (
             <>
               <Loader2 className="h-3 w-3 animate-spin text-[#4F8CFF]" />
               <span className="hidden sm:inline">Saving...</span>

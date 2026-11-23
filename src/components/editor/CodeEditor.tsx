@@ -1,7 +1,11 @@
 import Editor, { type Monaco, type OnMount, type OnValidate } from '@monaco-editor/react';
 import { Code2, FolderOpen } from 'lucide-react';
+import type * as MonacoTypes from 'monaco-editor';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { YjsMonacoBinding } from '../../services/collab/YjsMonacoBinding';
+import { ideLspClient } from '../../services/lsp/lspClient';
+import { useCollabStore } from '../../store/useCollabStore';
 import { useThemeStore } from '../../store/useThemeStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { registerMonacoThemes } from '../../styles/monacoThemes';
@@ -19,6 +23,7 @@ export function CodeEditor({
   onEditorReady,
 }: CodeEditorProps) {
   const {
+    activeWorkspace,
     files,
     activeFileId,
     drafts,
@@ -32,11 +37,28 @@ export function CodeEditor({
   } = useWorkspaceStore();
 
   const { theme, editorSettings } = useThemeStore();
+  const collabEnabled = useCollabStore((s) => s.enabled);
+  const setCollabStatus = useCollabStore((s) => s.setStatus);
+  const setCollabRoomState = useCollabStore((s) => s.setRoomState);
+  const resetCollab = useCollabStore((s) => s.reset);
+
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const collabBindingRef = useRef<YjsMonacoBinding | null>(null);
 
   const activeFile = files.find((f) => f.id === activeFileId && f.type === 'file') ?? null;
   const activeDraft = activeFile ? drafts[activeFile.id] : undefined;
   const activeValue = activeFile ? (activeDraft ?? activeFile.content) : '';
+
+  // Keep LSP context resolver up to date
+  useEffect(() => {
+    ideLspClient.bindContextResolver(() => ({
+      workspaceId: activeWorkspace?.id ?? null,
+      fileId: activeFile?.id ?? null,
+      filePath: activeFile?.path ?? null,
+      language: activeFile?.language ?? null,
+    }));
+  }, [activeWorkspace?.id, activeFile?.id, activeFile?.path, activeFile?.language]);
 
   // Debounced autosave (1200ms after editing stops)
   useEffect(() => {
@@ -51,12 +73,95 @@ export function CodeEditor({
     return () => window.clearTimeout(timer);
   }, [activeFile?.id, activeDraft, saveFile]);
 
+  // Debounced LSP document sync
+  useEffect(() => {
+    if (!activeWorkspace || !activeFile) return;
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    const timer = window.setTimeout(() => {
+      void ideLspClient
+        .syncDocumentChange({
+          workspaceId: activeWorkspace.id,
+          filePath: activeFile.path,
+          language: activeFile.language,
+          content: activeValue,
+        })
+        .then((diags) => {
+          if (monaco && editor) {
+            const model = editor.getModel();
+            if (model) {
+              const problems = ideLspClient.applyDiagnosticsToModel(
+                monaco,
+                model,
+                activeFile.id,
+                activeFile.path,
+                diags,
+              );
+              setFileProblems(activeFile.id, problems);
+            }
+          }
+        });
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [activeWorkspace?.id, activeFile?.id, activeFile?.path, activeFile?.language, activeValue, setFileProblems]);
+
+  // Yjs Collaboration binding lifecycle per active file
+  useEffect(() => {
+    collabBindingRef.current?.destroy();
+    collabBindingRef.current = null;
+
+    if (!collabEnabled || !activeWorkspace || !activeFile || !monacoRef.current || !editorRef.current) {
+      resetCollab();
+      return;
+    }
+
+    const binding = new YjsMonacoBinding({
+      workspaceId: activeWorkspace.id,
+      filePath: activeFile.path,
+      initialContent: activeValue,
+      monaco: monacoRef.current,
+      editor: editorRef.current as MonacoTypes.editor.IStandaloneCodeEditor,
+      callbacks: {
+        onStatusChange: (status) => setCollabStatus(status),
+        onPeersChange: (peers, selfId) => setCollabRoomState(activeFile.path, peers, selfId),
+        onRemoteTextApplied: (content) => updateDraft(activeFile.id, content),
+      },
+    });
+    collabBindingRef.current = binding;
+
+    return () => {
+      binding.destroy();
+      if (collabBindingRef.current === binding) {
+        collabBindingRef.current = null;
+      }
+    };
+  }, [collabEnabled, activeWorkspace?.id, activeFile?.id, activeFile?.path]);
+
   const handleBeforeMount = (monaco: Monaco) => {
+    monacoRef.current = monaco;
     registerMonacoThemes(monaco);
+    ideLspClient.registerMonacoProviders(monaco, (filePath, diagnostics) => {
+      const state = useWorkspaceStore.getState();
+      const targetFile = state.files.find((f) => f.path === filePath);
+      if (!targetFile) return;
+      const model = editorRef.current?.getModel();
+      if (model && state.activeFileId === targetFile.id) {
+        const problems = ideLspClient.applyDiagnosticsToModel(
+          monaco,
+          model,
+          targetFile.id,
+          targetFile.path,
+          diagnostics,
+        );
+        state.setFileProblems(targetFile.id, problems);
+      }
+    });
   };
 
-  const handleMount: OnMount = (editor) => {
+  const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
 
     editor.onDidChangeCursorPosition((e: { position: { lineNumber: number; column: number } }) => {
       setCursorPosition({
@@ -71,6 +176,45 @@ export function CodeEditor({
         void action.run();
       }
     });
+
+    if (activeWorkspace && activeFile) {
+      void ideLspClient
+        .syncOpenDocument({
+          workspaceId: activeWorkspace.id,
+          filePath: activeFile.path,
+          language: activeFile.language,
+          content: activeValue,
+        })
+        .then((diags) => {
+          const model = editor.getModel();
+          if (model) {
+            const problems = ideLspClient.applyDiagnosticsToModel(
+              monaco,
+              model,
+              activeFile.id,
+              activeFile.path,
+              diags,
+            );
+            setFileProblems(activeFile.id, problems);
+          }
+        });
+
+      if (collabEnabled) {
+        collabBindingRef.current?.destroy();
+        collabBindingRef.current = new YjsMonacoBinding({
+          workspaceId: activeWorkspace.id,
+          filePath: activeFile.path,
+          initialContent: activeValue,
+          monaco,
+          editor: editor as MonacoTypes.editor.IStandaloneCodeEditor,
+          callbacks: {
+            onStatusChange: (status) => setCollabStatus(status),
+            onPeersChange: (peers, selfId) => setCollabRoomState(activeFile.path, peers, selfId),
+            onRemoteTextApplied: (content) => updateDraft(activeFile.id, content),
+          },
+        });
+      }
+    }
   };
 
   // Handle jump-to-line from Search or Problems panel

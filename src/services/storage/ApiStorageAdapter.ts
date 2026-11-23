@@ -1,5 +1,6 @@
 import type { StarterTemplate, SupportedLanguage, Workspace, WorkspaceFile } from '../../types/ide';
 import { apiClient, extractApiError, type ApiSuccessResponse } from '../api/client';
+import { offlineSyncQueue } from '../offline/offlineSyncQueue';
 import type {
   StorageAdapter,
   WorkspaceListResult,

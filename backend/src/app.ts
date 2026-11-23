@@ -7,8 +7,10 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
 import authRoutes from './routes/authRoutes.js';
 import containerRoutes from './routes/containerRoutes.js';
+import executionRoutes from './routes/executionRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
+import monitoringRoutes from './routes/monitoringRoutes.js';
 import terminalRoutes from './routes/terminalRoutes.js';
 import workspaceRoutes from './routes/workspaceRoutes.js';
 
@@ -60,6 +62,8 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use('/api/files', fileRoutes);
   app.use('/api/containers', containerRoutes);
   app.use('/api/terminal', terminalRoutes);
+  app.use('/api/execution', executionRoutes);
+  app.use('/api/monitoring', monitoringRoutes);
 
   if (includeFallbackHandlers) {
     app.use(notFoundHandler);

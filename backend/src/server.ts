@@ -6,6 +6,9 @@ import {
   startContainerCleanupScheduler,
   stopContainerCleanupScheduler,
 } from './docker/container.cleanup.js';
+import { collabService } from './collab/collab.service.js';
+import { executionManager } from './execution/execution.manager.js';
+import { lspManager } from './lsp/lsp.manager.js';
 import { terminalManager } from './terminal/terminal.manager.js';
 import { initSocketServer } from './websocket/socket.server.js';
 
@@ -24,6 +27,9 @@ async function bootstrap(): Promise<void> {
   const shutdown = async () => {
     console.log('\n[Backend] Shutting down gracefully...');
     stopContainerCleanupScheduler();
+    await executionManager.stopAll();
+    lspManager.closeAll();
+    await collabService.closeAll();
     await terminalManager.closeAll();
     io.close();
     httpServer.close(async () => {

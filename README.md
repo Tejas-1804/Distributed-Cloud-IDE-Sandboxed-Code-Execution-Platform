@@ -1,109 +1,76 @@
 # Distributed Cloud IDE & Sandboxed Code Execution Platform
 
-**Phase 3 (Docker Container Orchestration) & Phase 4 (Interactive Terminal & Real-Time WebSockets)**
-
-A full-stack, VS Code-inspired Cloud IDE combining a React + TypeScript + Monaco + xterm.js frontend with an Express.js + Socket.IO + Dockerode + MongoDB/Mongoose backend. Workspaces open directly from the Dashboard without a login wall in local development mode, while preserving backend JWT security, workspace ownership verification, and hardened Docker container isolation.
+A full-stack, VS Code-inspired Cloud IDE featuring a React + TypeScript + Monaco + xterm.js + PWA frontend paired with an Express.js + Socket.IO + Dockerode + Yjs + LSP + MongoDB/Mongoose backend. Workspaces open directly from the Dashboard without a login wall during local development (`DEV_ACCESS_MODE`), while production builds (`NODE_ENV=production`) require real JWT authentication and enforce workspace ownership, collaborator ACLs, and hardened Docker container isolation.
 
 ---
 
-## Implemented Through Phase 4
+## Feature Architecture (Phases 1–8)
 
-### Frontend (`src/` — React + TypeScript + Vite + Monaco + xterm.js)
-- **Direct IDE Landing (`/`)**: Login, registration, and profile UI screens/routes are removed. Opening the app lands directly on the Workspace Dashboard and opens `/workspace/:id` immediately.
-- **Container Environment Panel (`src/components/containers/EnvironmentPanel.tsx`, `useContainerStore.ts`)**:
-  - Dedicated Activity Bar view (`Box` icon) and Status Bar quick-indicator inside `/workspace/:id`.
-  - Displays language runtime, environment template, Docker image, live container status, resource & security limits (`Memory`, `CPU`, `PIDs`, `NetworkMode`, `ReadonlyRootfs`), lifecycle buttons (`Create`, `Start`, `Stop`, `Restart`, `Remove`), live container logs viewer, and honest `DOCKER_UNAVAILABLE` diagnostics when Docker Engine is offline.
-- **Interactive Container Terminal (`src/components/terminal/TerminalPanel.tsx`, `XtermView.tsx`)**:
-  - Real `@xterm/xterm` emulator with `@xterm/addon-fit` (`ResizeObserver` + window resize auto-fit) and `@xterm/addon-web-links`.
-  - Bidirectional Socket.IO client (`src/services/terminal/terminalSocket.ts`) with bounded exponential backoff reconnection and scrollback replay.
-  - Multi-tab terminal sessions per workspace (`useTerminalStore.ts`), font size controls (`10px–22px`), clear, restart, close, maximize/restore panel, and light/dark theme sync.
-- **IDE Workbench (`/workspace/:id`)**:
-  - Monaco Editor with multi-file tabs, unsaved-edits guard, debounced autosave (1.2s) + manual `Ctrl+S` save, themes, minimap/word-wrap toggles, and real-time diagnostics (`Problems` panel).
-  - Nested File Explorer synced with MongoDB and synchronized into `/workspace` inside running containers.
+### Phase 1–2: Workbench & Persistence
+- **IDE Dashboard (`/`) & Workbench (`/workspace/:id`)**: Lazy-loaded React SPA routes with Workspace search/language filtering, Demo workspace restore, File Explorer (nested folders, cascading rename/delete), Monaco Editor multi-tab management, debounced autosave (1.2s) + `Ctrl+S`, Command Palette (`Ctrl+Shift+P`), Quick Open (`Ctrl+P`), and Light/Dark themes.
+- **MongoDB Persistence (`backend/src/models/`)**: Workspaces, files/folders, execution container records, execution history (`ExecutionRecord`), and collaborative Yjs document snapshots (`CollaborationDoc`).
 
-### Backend (`backend/` — Express + Socket.IO + Dockerode + Mongoose)
-- **Docker Container Lifecycle Manager (`backend/src/docker/`)**:
-  - `DockerService` (`docker.service.ts`) + `container.config.ts` + `container.cleanup.ts` manage isolated workspace containers (`createContainer`, `startContainer`, `stopContainer`, `restartContainer`, `removeContainer`, `inspectContainer`, `listContainers`, `getContainerLogs`, `getContainerStatus`).
-  - Prefers pre-built hardened `cloudide-sandbox-*` custom images when present locally, falling back to official runtime images (`python:3.12-slim`, `node:20-alpine`, `eclipse-temurin:21-jdk`, `gcc:13`).
-  - Applies security hardening (`Privileged: false`, `CapDrop: ['ALL']`, `SecurityOpt: ['no-new-privileges:true']`, `NetworkMode: 'none'`, memory/swap caps, CPU quota, PID limits, non-root `1000:1000` user for custom images, optional `CONTAINER_READONLY_ROOTFS`).
-  - Enforces active container cap (`CONTAINER_MAX_ACTIVE`) and runs an automatic idle container cleanup scheduler (`CONTAINER_IDLE_TIMEOUT_MS`).
-  - Sanitized DTOs: raw `containerId` and `containerName` are stripped from API responses and model `toJSON` transforms.
-- **Interactive Terminal & WebSockets (`backend/src/terminal/`, `backend/src/websocket/`)**:
-  - `DockerExecDriver` attaches interactive TTY shells (`container.exec`) with resize (`exec.resize`), `OUTPUT_OVERFLOW` runaway buffer protection, and idle session cleanup.
-- **Security & Local Development Access Mode**:
-  - Backend JWT auth (`requireAuth`), rate limiters, Helmet headers, CORS origin validation, Zod validation, and workspace ownership checks (`workspace-access.middleware.ts`) protect all `/api/workspaces`, `/api/files`, `/api/containers`, and `/api/terminal` routes.
-  - **Development Access Mode (`DEV_ACCESS_MODE`)**: Enabled by default in `NODE_ENV=development` (unless `DEV_ACCESS_MODE=false`) so local single-user requests resolve to `local-dev@cloudide.local` without login UI. **Automatically disabled in `NODE_ENV=production`**.
-  - **Production Sandboxing Caveat**: Local Docker Desktop containers provide strong process/network/filesystem isolation when `cloudide-sandbox-*` images and `NetworkMode: 'none'` are active, but production multi-tenant deployments should additionally apply the seccomp profile (`infrastructure/docker/seccomp/sandbox-seccomp.json`), rootless Docker or gVisor/Kata runtimes, and strict non-dev JWT authentication (`NODE_ENV=production`).
+### Phase 3–4: Docker Container Orchestration & Interactive Terminal
+- **Docker Container Manager (`backend/src/docker/`)**: `DockerService` provisions hardened containers (`Privileged: false`, `CapDrop: ['ALL']`, `SecurityOpt: ['no-new-privileges:true']`, `NetworkMode: 'none'`, CPU/Memory/PID limits, non-root `UID 1000` custom images) and syncs `/workspace` via `tar-stream`.
+- **Interactive Container Terminal (`backend/src/terminal/`, `src/components/terminal/`)**: `@xterm/xterm` + `@xterm/addon-fit` + Socket.IO streaming attached directly to `container.exec` with TTY resize, scrollback replay, and `OUTPUT_OVERFLOW` guards.
 
-### Infrastructure (`infrastructure/`)
-- Custom non-root sandbox Dockerfiles (`UID 1000`, `/workspace` working directory):
-  - `infrastructure/docker/python/Dockerfile` (`cloudide-sandbox-python:3.12`)
-  - `infrastructure/docker/node/Dockerfile` (`cloudide-sandbox-node:20`)
-  - `infrastructure/docker/java/Dockerfile` (`cloudide-sandbox-java:21`)
-  - `infrastructure/docker/cpp/Dockerfile` (`cloudide-sandbox-cpp:13` with `gcc` & `g++`)
-- `infrastructure/docker/seccomp/sandbox-seccomp.json` — Baseline syscall allowlist profile.
-- `infrastructure/compose/docker-compose.yml` — MongoDB, isolated internal sandbox network (`internal: true`), app network, backend service, and `images` build profile.
+### Phase 5: Secure Multi-Language Code Execution Engine
+- **Languages**: Python (`python3`), JavaScript (`node`), Java (`javac` + `java`), C (`gcc`), and C++ (`g++`) executed exclusively inside workspace containers (`DockerExecutionDriver`, never on the host).
+- **Endpoints & Real-Time Streaming**: `POST /api/execution/run`, `POST /api/execution/stop`, `GET /api/execution/:id/status`, `GET /api/execution/:id/logs`, `GET /api/execution/history`, plus live Socket.IO events (`execution:start|output|stderr|complete|error|timeout|cancelled`).
+- **Safety Limits**: Argv-only process specs (`EXECUTION_TIMEOUT_MS`, `EXECUTION_COMPILE_TIMEOUT_MS`, `EXECUTION_MAX_OUTPUT_BYTES`), automatic `/tmp/exec_*` cleanup, and bounded history summaries.
+
+### Phase 6: Language Server Protocol (LSP) & Yjs Collaboration
+- **Extensible LSP Gateway (`backend/src/lsp/`, `src/services/lsp/lspClient.ts`)**:
+  - **TypeScript / JavaScript**: Full in-process `ts.createLanguageService` diagnostics, autocomplete, hover, definitions, references, and document symbols.
+  - **Python**: Built-in Python syntax/semantic analyzer & keyword/builtin intelligence (plus optional external `pyright-langserver` stdio bridge when installed in `$PATH`).
+  - **Java / C / C++**: Configured extensible adapter registry (`jdtls` / `clangd` stubs ready for external binaries when provisioned).
+- **Real-Time Collaboration (`backend/src/collab/`, `src/services/collab/YjsMonacoBinding.ts`)**: Room-scoped `Y.Doc` CRDT synchronization, collaborator cursor awareness decorations, workspace owner/collaborator access control, and persistent `CollaborationDoc` recovery across reconnects.
+
+### Phase 7: Web Workers, WebAssembly, Offline PWA & Monitoring
+- **Isolated Local Execution (`src/execution/executionStrategy.ts`, `src/workers/`)**:
+  - **JavaScript Worker (`jsSandbox.worker.ts`)**: Runs JavaScript locally/offline inside a dedicated Web Worker with console capture, output caps, and hard `5s` worker termination.
+  - **WebAssembly Worker (`wasmSandbox.worker.ts`)**: Runs `.wasm` binaries (with WASI `fd_write` stdout) and compiles a restricted **C subset** (`int main()`, integers, arithmetic, comparisons, `if/else`, `while`, `for`, `putchar`, `printf`) directly to WASM bytecode executed via `WebAssembly.instantiate`.
+  - **Honest Strategy Scope**: Python, Java, and full C/C++ require online Cloud Docker containers; `ExecutionStrategyService` clearly reports offline/local scope without faking unsupported runtimes.
+- **PWA & Offline Sync (`vite-plugin-pwa`, `offlineSyncQueue.ts`)**: Installable manifest + PNG icons, Workbox app-shell caching, `OfflineIndicator`, `PWAInstallButton`, and automatic offline edit queue replay on reconnect.
+- **Monitoring Dashboard (`/monitoring`, `GET /api/monitoring/metrics`)**: Real-time database, Docker availability, active terminals/executions/LSP/Collab rooms, execution outcome stats, and process memory telemetry.
+
+### Phase 8: Production Infrastructure & Verification
+- **Docker & Nginx (`infrastructure/`)**: Production multi-stage `frontend/Dockerfile` (Nginx Alpine), non-root `backend/Dockerfile`, `infrastructure/nginx/nginx.conf` (SPA, gzip, security headers, `/api` & `/socket.io` WebSocket proxy), and `infrastructure/compose/docker-compose.prod.yml` with `tecnativa/docker-socket-proxy` isolation.
 
 ---
 
-## Storage Architecture
-- **Metadata & Workspace Files**: Stored in MongoDB (`Workspace`, `FileModel`, `ExecutionEnvironment`, `User` collections).
-- **Container Synchronization**: On container start/restart and file updates in running containers, `DockerService.syncWorkspaceFilesToContainer` packs normalized workspace entries via `tar-stream` and extracts them to `/workspace` inside the container via `putArchive`.
+## Quick Start & Commands
 
----
-
-## REST & WebSocket APIs
-
-### Container REST Endpoints (`/api/containers`)
-All endpoints require `requireAuth` and workspace ownership checks where applicable:
-- `GET /api/containers` — List user workspaces and their container statuses + limits + `dockerAvailable`
-- `POST /api/containers` `{ workspaceId, autoStart? }` — Provision a hardened sandbox container
-- `POST /api/containers/:workspaceId/start` — Create (if missing) and start the workspace container
-- `POST /api/containers/:workspaceId/stop` — Stop a running container
-- `POST /api/containers/:workspaceId/restart` — Restart the container and re-sync workspace files
-- `DELETE /api/containers/:workspaceId` — Force remove the container from Docker Engine
-- `GET /api/containers/:workspaceId/status` — Retrieve container status, template, image, limits, and availability
-- `GET /api/containers/:workspaceId/inspect` — Inspect live Docker container state (sanitized)
-- `GET /api/containers/:workspaceId/logs?tail=200` — Retrieve demultiplexed container stdout/stderr logs
-
-### Terminal REST & Socket.IO (`/api/terminal`, `/socket.io`)
-- `GET /api/terminal/health`, `POST /api/terminal/sessions`, `GET /api/terminal/sessions/:sessionId`, `DELETE /api/terminal/sessions/:sessionId`
-- Socket events: `terminal:create`, `terminal:input`, `terminal:resize`, `terminal:clear`, `terminal:restart`, `terminal:close`
-
----
-
-## Local Setup & Windows Docker Desktop (WSL2) Guide
-
-### Prerequisites
-- Node.js 20+
-- Docker Desktop (with **WSL2 backend** enabled on Windows) running locally for live containers
-- MongoDB (local service, Docker Compose `mongodb`, or embedded `MongoMemoryServer` fallback when `MONGODB_URI` is unset in dev)
-
-### Build Custom Hardened Sandbox Images (Windows PowerShell)
-```powershell
-docker build -t cloudide-sandbox-python:3.12 -f infrastructure/docker/python/Dockerfile infrastructure/docker/python
-docker build -t cloudide-sandbox-node:20 -f infrastructure/docker/node/Dockerfile infrastructure/docker/node
-docker build -t cloudide-sandbox-java:21 -f infrastructure/docker/java/Dockerfile infrastructure/docker/java
-docker build -t cloudide-sandbox-cpp:13 -f infrastructure/docker/cpp/Dockerfile infrastructure/docker/cpp
-```
-*(Or via Compose: `docker compose -f infrastructure/compose/docker-compose.yml --profile images build`)*
-
-### Start Unified Dev Server (`http://localhost:3000`)
 ```bash
+# Install dependencies
 npm install
 npm --prefix backend install
+
+# Start unified development server (http://localhost:3000)
 npm run dev
-```
 
-### Verification Commands
-```bash
-# Backend typecheck, build & integration tests
-npm --prefix backend run typecheck
-npm --prefix backend run build
-npm --prefix backend test
-
-# Frontend lint, unit tests & build
-npm run lint
-npm test
+# Build production bundles
 npm run build
+
+# Run backend & frontend tests
+npm --prefix backend run typecheck
+npm --prefix backend test
+npm test
+
+# Measure live API, LSP & Yjs latencies + bundle sizes
+node scripts/benchmark.mjs
 ```
+
+### Build Custom Hardened Sandbox Images (Docker Host / WSL2)
+```bash
+docker compose -f infrastructure/compose/docker-compose.yml --profile images build
+```
+
+### Production Compose Deployment
+```bash
+JWT_ACCESS_SECRET="your-32+-char-access-secret" \
+JWT_REFRESH_SECRET="your-32+-char-refresh-secret" \
+docker compose -f infrastructure/compose/docker-compose.prod.yml up --build -d
+```
+
+See `docs/SECURITY_AUDIT.md`, `docs/PERFORMANCE_BENCHMARKS.md`, and `docs/FINAL_PROJECT_REPORT.md` for detailed verification results.

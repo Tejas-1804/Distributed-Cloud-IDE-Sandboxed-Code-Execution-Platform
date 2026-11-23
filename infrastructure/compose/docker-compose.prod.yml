@@ -1,0 +1,98 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: cloud-ide-mongodb-prod
+    restart: unless-stopped
+    volumes:
+      - mongodb_prod_data:/data/db
+    networks:
+      - cloudide-internal
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Isolated Docker socket proxy: exposes only scoped container/exec/image APIs to backend
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.2
+    container_name: cloud-ide-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      EXEC: 1
+      IMAGES: 1
+      INFO: 1
+      PING: 1
+      POST: 1
+      DELETE: 1
+      VOLUMES: 0
+      NETWORKS: 0
+      BUILD: 0
+      SYSTEM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - cloudide-docker-ctl
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/backend/Dockerfile
+    container_name: cloud-ide-backend-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DEV_ACCESS_MODE: 'false'
+      MONGODB_URI: mongodb://mongodb:27017/distributed_cloud_ide
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      ACCESS_TOKEN_EXPIRY: 15m
+      REFRESH_TOKEN_EXPIRY: 7d
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      DOCKER_HOST: tcp://docker-proxy:2375
+      CONTAINER_MEMORY_LIMIT_MB: 256
+      CONTAINER_CPU_LIMIT: '0.5'
+      CONTAINER_PIDS_LIMIT: 64
+      CONTAINER_MAX_ACTIVE: 20
+      CONTAINER_IDLE_TIMEOUT_MS: 3600000
+      CONTAINER_NETWORK_MODE: none
+      EXECUTION_TIMEOUT_MS: 10000
+      EXECUTION_COMPILE_TIMEOUT_MS: 15000
+      EXECUTION_MAX_OUTPUT_BYTES: 131072
+      EXECUTION_MAX_CONCURRENT_PER_USER: 3
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    networks:
+      - cloudide-internal
+      - cloudide-docker-ctl
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/frontend/Dockerfile
+    container_name: cloud-ide-frontend-prod
+    restart: unless-stopped
+    ports:
+      - '${HTTP_PORT:-8080}:80'
+    depends_on:
+      - backend
+    networks:
+      - cloudide-internal
+
+networks:
+  cloudide-internal:
+    driver: bridge
+  cloudide-docker-ctl:
+    driver: bridge
+    internal: true
+  cloudide-sandbox-net:
+    driver: bridge
+    internal: true
+
+volumes:
+  mongodb_prod_data:

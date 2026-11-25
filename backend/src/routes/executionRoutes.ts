@@ -7,12 +7,13 @@ import {
   stopExecutionController,
 } from '../execution/execution.controller.js';
 import { requireAuth } from '../middleware/auth.js';
+import { executionRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
 router.use(requireAuth);
 
-router.post('/run', runExecutionController);
+router.post('/run', executionRateLimiter, runExecutionController);
 router.post('/stop', stopExecutionController);
 router.get('/history', getExecutionHistoryController);
 router.get('/:id/status', getExecutionStatusController);

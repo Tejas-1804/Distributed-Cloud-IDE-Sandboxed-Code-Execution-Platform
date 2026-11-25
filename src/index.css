@@ -1,4 +1,3 @@
-
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -10,7 +9,7 @@
    White + Warm Beige + Espresso Brown
 
    DARK:
-   Deep Charcoal + Warm Brown + Champagne Accent
+   Black + Warm Brown + Champagne Accent
    ========================================================= */
 
 :root {
@@ -88,11 +87,11 @@ html.dark {
   --brand-accent-soft: rgba(194, 154, 117, 0.13);
 
   /* Application */
-  --app-bg: #121110;
-  --surface: #181614;
-  --surface-raised: #1f1b18;
-  --surface-hover: #28221e;
-  --surface-active: #302822;
+  --app-bg: #000000;
+  --surface: #000000;
+  --surface-raised: #000000;
+  --surface-hover: #111111;
+  --surface-active: #181818;
 
   /* Borders */
   --border: #352d27;
@@ -567,7 +566,7 @@ a {
 
   overflow: hidden;
 
-  background: #141211;
+  background: #000000;
 }
 
 /* =========================================================
@@ -722,9 +721,7 @@ a {
    ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  * {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;

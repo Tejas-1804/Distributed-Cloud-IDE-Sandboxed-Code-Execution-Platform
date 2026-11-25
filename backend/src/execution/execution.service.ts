@@ -97,7 +97,9 @@ export class ExecutionService {
     session: ActiveExecutionSession;
   }> {
     const ensured = await this.ensureContainer(ctx.workspace);
-    await this.syncWorkspaceFiles(ctx.workspace._id, ensured.containerId);
+    if (dockerService.isWorkspaceDirty(ctx.workspace._id)) {
+      await this.syncWorkspaceFiles(ctx.workspace._id, ensured.containerId);
+    }
 
     const session = this.manager.createSession({
       workspaceId: ctx.workspace._id.toString(),
@@ -289,7 +291,9 @@ export class ExecutionService {
   async runExecution(input: ExecutionRunInput): Promise<PublicExecutionStatus> {
     const ctx = await this.validateExecution(input);
     const ensured = await this.ensureContainer(ctx.workspace);
-    await this.syncWorkspaceFiles(ctx.workspace._id, ensured.containerId);
+    if (dockerService.isWorkspaceDirty(ctx.workspace._id)) {
+      await this.syncWorkspaceFiles(ctx.workspace._id, ensured.containerId);
+    }
 
     const session = this.manager.createSession({
       workspaceId: ctx.workspace._id.toString(),

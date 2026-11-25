@@ -88,6 +88,7 @@ function demuxDockerLogOutput(raw: Buffer | string): string {
 
 export class DockerService {
   private readonly docker: Docker;
+  private readonly dirtyWorkspaces = new Set<string>();
 
   constructor(dockerClient?: Docker) {
     this.docker = dockerClient ?? createDockerClient();
@@ -95,6 +96,77 @@ export class DockerService {
 
   getClient(): Docker {
     return this.docker;
+  }
+
+  markWorkspaceDirty(workspaceId: mongoose.Types.ObjectId | string): void {
+    this.dirtyWorkspaces.add(workspaceId.toString());
+  }
+
+  isWorkspaceDirty(workspaceId: mongoose.Types.ObjectId | string): boolean {
+    return this.dirtyWorkspaces.has(workspaceId.toString());
+  }
+
+  clearWorkspaceDirty(workspaceId: mongoose.Types.ObjectId | string): void {
+    this.dirtyWorkspaces.delete(workspaceId.toString());
+  }
+
+  async syncSingleFileToContainer(
+    workspaceId: mongoose.Types.ObjectId,
+    filePath: string,
+    content: string,
+  ): Promise<boolean> {
+    if (mongoose.connection.readyState !== 1) return false;
+    const envDoc = await ExecutionEnvironment.findOne({ workspaceId });
+    if (!envDoc?.containerId || envDoc.status !== 'running') {
+      this.markWorkspaceDirty(workspaceId);
+      return false;
+    }
+
+    const safeRelPath = normalizeRelativePath(filePath);
+    if (!safeRelPath || safeRelPath.split('/').some((seg) => seg === '..')) {
+      return false;
+    }
+
+    const pack = tar.pack();
+    const contentBuffer = Buffer.from(content ?? '', 'utf8');
+    pack.entry(
+      { name: safeRelPath, type: 'file', size: contentBuffer.length, mode: 0o644 },
+      contentBuffer,
+    );
+    pack.finalize();
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of pack as AsyncIterable<Uint8Array | string>) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    const container = this.docker.getContainer(envDoc.containerId);
+    await container.putArchive(Buffer.concat(chunks), { path: '/workspace' });
+    return true;
+  }
+
+  async removePathFromContainer(
+    workspaceId: mongoose.Types.ObjectId,
+    relativePath: string,
+  ): Promise<void> {
+    if (mongoose.connection.readyState !== 1) return;
+    const envDoc = await ExecutionEnvironment.findOne({ workspaceId });
+    if (!envDoc?.containerId || envDoc.status !== 'running') {
+      this.markWorkspaceDirty(workspaceId);
+      return;
+    }
+
+    const safeRelPath = normalizeRelativePath(relativePath);
+    if (!safeRelPath || safeRelPath.split('/').some((seg) => seg === '..')) return;
+
+    const container = this.docker.getContainer(envDoc.containerId);
+    const exec = await container.exec({
+      Cmd: ['rm', '-rf', `/workspace/${safeRelPath}`],
+      AttachStdout: false,
+      AttachStderr: false,
+      Tty: false,
+    });
+    await exec.start({ hijack: false, stdin: false });
   }
 
   async checkAvailability(): Promise<DockerAvailability> {
@@ -277,6 +349,7 @@ export class DockerService {
 
     const container = this.docker.getContainer(containerId);
     await container.putArchive(tarArchive, { path: '/workspace' });
+    this.clearWorkspaceDirty(workspaceId);
   }
 
   async createContainer(

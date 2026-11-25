@@ -140,6 +140,7 @@ export async function createFile(
       throw new AppError(404, 'Workspace not found', 'WORKSPACE_NOT_FOUND');
     }
 
+    const workspaceId = req.workspace._id;
     const { filename, parentId, parentPath, content } = req.body as {
       filename: string;
       parentId?: string | null;
@@ -176,7 +177,11 @@ export async function createFile(
 
     req.workspace.updatedAt = new Date();
     await req.workspace.save();
-    void dockerService.syncIfRunning(req.workspace._id);
+    void dockerService
+      .syncSingleFileToContainer(req.workspace._id, file.path, file.content)
+      .catch(() => {
+        dockerService.markWorkspaceDirty(workspaceId);
+      });
 
     sendSuccess(res, 201, 'File created successfully', {
       file: serializeFile(file),
@@ -310,7 +315,11 @@ export async function updateFileContent(
 
     workspace.updatedAt = new Date();
     await workspace.save();
-    void dockerService.syncIfRunning(workspace._id);
+    void dockerService
+      .syncSingleFileToContainer(workspace._id, file.path, file.content)
+      .catch(() => {
+        dockerService.markWorkspaceDirty(workspace._id);
+      });
 
     sendSuccess(res, 200, 'File saved successfully', {
       file: serializeFile(file),
@@ -425,7 +434,11 @@ export async function deleteEntry(
 
     workspace.updatedAt = new Date();
     await workspace.save();
-    void dockerService.syncIfRunning(workspace._id);
+    void dockerService
+      .removePathFromContainer(workspace._id, file.path)
+      .catch(() => {
+        dockerService.markWorkspaceDirty(workspace._id);
+      });
 
     sendSuccess(res, 200, 'Deleted successfully', {
       deletedIds,

@@ -40,11 +40,22 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        const isLocalDevelopmentOrigin = (() => {
+          if (env.NODE_ENV === 'production' || !origin) return false;
+          try {
+            const hostname = new URL(origin).hostname;
+            return ['localhost', '127.0.0.1', '::1'].includes(hostname);
+          } catch {
+            return false;
+          }
+        })();
+
+        if (!origin || allowedOrigins.includes(origin) || isLocalDevelopmentOrigin) {
           callback(null, true);
           return;
         }
-        callback(null, true); // Allow Vite proxy / Cloud Run / same-host dev origins cleanly
+
+        callback(new Error('Origin is not allowed by CORS'));
       },
       credentials: true,
     }),

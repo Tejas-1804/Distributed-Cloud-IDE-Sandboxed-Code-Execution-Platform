@@ -18,7 +18,7 @@ const Monitoring = lazy(() =>
 
 function RouteLoadingFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f7f9] text-xs text-[#64748B] dark:bg-[#0f1115] dark:text-[#9299A7]">
+    <div className="flex min-h-screen items-center justify-center bg-[#f6f7f9] text-xs text-[#64748B] dark:bg-[#000000] dark:text-[#9299A7]">
       Loading Cloud IDE...
     </div>
   );
@@ -29,7 +29,7 @@ function AppContent() {
 
   return (
     <>
-      <main className="min-h-screen bg-[#f6f7f9] text-[#111827] antialiased transition-colors duration-200 dark:bg-[#0f1115] dark:text-[#f3f4f6]">
+      <main className="min-h-screen bg-[#f6f7f9] text-[#111827] antialiased transition-colors duration-200 dark:bg-[#000000] dark:text-[#f3f4f6]">
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />

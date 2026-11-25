@@ -36,27 +36,50 @@ export function withDockerTimeout<T>(
   });
 }
 
-export async function pingDockerDaemon(docker: Docker): Promise<DockerAvailability> {
-  try {
-    await withDockerTimeout(docker.ping(), 2500, 'Docker daemon ping timed out');
-    const versionInfo = await withDockerTimeout(
-      docker.version(),
-      2500,
-      'Docker version check timed out',
-    );
-    return {
-      available: true,
-      version: versionInfo.Version,
-    };
-  } catch (err) {
-    return {
-      available: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : 'Docker daemon is unavailable. Start Docker Desktop to manage workspace containers.',
-    };
+let cachedAvailability: { value: DockerAvailability; expiresAt: number } | null = null;
+let inflightPing: Promise<DockerAvailability> | null = null;
+
+export async function pingDockerDaemon(
+  docker: Docker,
+  ttlMs = 5000,
+): Promise<DockerAvailability> {
+  const now = Date.now();
+  if (cachedAvailability && now < cachedAvailability.expiresAt) {
+    return cachedAvailability.value;
   }
+  if (inflightPing) {
+    return inflightPing;
+  }
+
+  inflightPing = (async () => {
+    try {
+      await withDockerTimeout(docker.ping(), 2500, 'Docker daemon ping timed out');
+      const versionInfo = await withDockerTimeout(
+        docker.version(),
+        2500,
+        'Docker version check timed out',
+      );
+      const result: DockerAvailability = {
+        available: true,
+        version: versionInfo.Version,
+      };
+      cachedAvailability = { value: result, expiresAt: Date.now() + ttlMs };
+      return result;
+    } catch (err) {
+      const result: DockerAvailability = {
+        available: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : 'Docker daemon is unavailable. Start Docker Desktop to manage workspace containers.',
+      };
+      cachedAvailability = { value: result, expiresAt: Date.now() + 2000 };
+      return result;
+    } finally {
+      inflightPing = null;
+    }
+  })();
+  return inflightPing;
 }
 
 export const defaultDockerClient = createDockerClient();

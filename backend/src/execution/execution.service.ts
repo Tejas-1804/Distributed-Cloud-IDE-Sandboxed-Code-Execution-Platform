@@ -91,7 +91,7 @@ export class ExecutionService {
     };
   }
 
-  async prepareWorkspace(ctx: ValidatedExecutionContext): Promise<{
+  async prepareWorkspace(ctx: ValidatedExecutionContext, userId: string): Promise<{
     containerId: string;
     spec: ExecutionCommandSpec;
     session: ActiveExecutionSession;
@@ -101,15 +101,12 @@ export class ExecutionService {
 
     const session = this.manager.createSession({
       workspaceId: ctx.workspace._id.toString(),
-      userId: ctx.workspace.ownerId.toString() === ctx.workspace.ownerId.toString()
-        ? ''
-        : '',
+      userId,
       containerId: ensured.containerId,
       filename: ctx.entryFilePath,
       language: ctx.language,
     });
 
-    // Preserve the caller's userId cleanly via explicit override in runExecution
     const spec = buildExecutionCommandSpec({
       executionId: session.executionId,
       language: ctx.language,

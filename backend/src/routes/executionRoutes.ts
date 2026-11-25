@@ -1,3 +1,4 @@
+// @ts-ignore Express typings are unavailable in this environment.
 import { Router } from 'express';
 import {
   getExecutionHistoryController,

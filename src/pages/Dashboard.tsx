@@ -199,11 +199,11 @@ export function Dashboard() {
               <div
                 className="
                   mt-1.5 hidden
-                  text-[11px]
+                  text-[13px]
                   font-medium
                   uppercase
                   tracking-[0.14em]
-                  text-[var(--text-muted)]
+                  text-[var(--text-secondary)]
                   sm:block
                 "
               >
@@ -251,7 +251,7 @@ export function Dashboard() {
               className="
                 group
                 flex items-center gap-2.5
-                text-[12px]
+                text-[14px]
                 font-medium
                 text-[var(--text-secondary)]
                 transition-colors duration-200
@@ -293,7 +293,7 @@ export function Dashboard() {
               rounded-[7px]
               bg-[var(--brand-accent)]
               px-4 py-2.5
-              text-[12px]
+              text-[14px]
               font-semibold
               tracking-[0.005em]
               text-white
@@ -351,7 +351,7 @@ export function Dashboard() {
               className="
                 mb-3.5
                 flex items-center gap-2.5
-                text-[11px]
+                text-[13px]
                 font-semibold
                 uppercase
                 tracking-[0.17em]
@@ -418,11 +418,11 @@ export function Dashboard() {
               <div
                 className="
                   mt-1.5
-                  text-[11px]
+                  text-[13px]
                   font-medium
                   uppercase
                   tracking-[0.11em]
-                  text-[var(--text-muted)]
+                  text-[var(--text-secondary)]
                 "
               >
                 Workspaces
@@ -450,11 +450,11 @@ export function Dashboard() {
               <div
                 className="
                   mt-1.5
-                  text-[11px]
+                  text-[13px]
                   font-medium
                   uppercase
                   tracking-[0.11em]
-                  text-[var(--text-muted)]
+                  text-[var(--text-secondary)]
                 "
               >
                 Persistence
@@ -484,8 +484,8 @@ export function Dashboard() {
                 <p
                   className="
                     mt-1.5
-                    text-[12px]
-                    text-[var(--text-muted)]
+                    text-[14px]
+                    text-[var(--text-secondary)]
                   "
                 >
                   Recently opened workspaces
@@ -494,11 +494,11 @@ export function Dashboard() {
 
               <span
                 className="
-                  text-[11px]
+                  text-[13px]
                   font-medium
                   uppercase
                   tracking-[0.11em]
-                  text-[var(--text-muted)]
+                  text-[var(--text-secondary)]
                 "
               >
                 {recentWorkspaces.length} recent
@@ -567,9 +567,9 @@ export function Dashboard() {
                         className="
                           mt-1.5
                           truncate
-                          text-[11px]
+                          text-[13px]
                           font-medium
-                          text-[var(--text-muted)]
+                          text-[var(--text-secondary)]
                         "
                       >
                         {ws.language} · {ws.template}
@@ -582,7 +582,7 @@ export function Dashboard() {
                       ml-3
                       h-[15px] w-[15px]
                       shrink-0
-                      text-[var(--text-muted)]
+                      text-[var(--text-secondary)]
                       transition-all duration-200
                       group-hover:-translate-y-0.5
                       group-hover:translate-x-0.5
@@ -617,7 +617,7 @@ export function Dashboard() {
                   absolute left-3.5 top-1/2
                   h-[16px] w-[16px]
                   -translate-y-1/2
-                  text-[var(--text-muted)]
+                  text-[var(--text-secondary)]
                   transition-colors duration-200
                 "
                 strokeWidth={1.8}
@@ -635,12 +635,12 @@ export function Dashboard() {
                   border border-[var(--border)]
                   bg-[var(--surface)]
                   py-2 pr-10 pl-10
-                  text-[12px]
+                  text-[14px]
                   font-medium
                   text-[var(--text-primary)]
                   outline-none
                   transition-all duration-200
-                  placeholder:text-[var(--text-muted)]
+                  placeholder:text-[var(--text-secondary)]
                   hover:border-[var(--border-strong)]
                   focus:border-[var(--brand-accent)]
                   focus:shadow-[0_0_0_3px_rgba(122,81,56,0.10)]
@@ -654,9 +654,9 @@ export function Dashboard() {
                   className="
                     absolute right-3 top-1/2
                     -translate-y-1/2
-                    text-[11px]
+                    text-[13px]
                     font-medium
-                    text-[var(--text-muted)]
+                    text-[var(--text-secondary)]
                     transition-colors duration-150
                     hover:text-[var(--text-primary)]
                   "
@@ -679,7 +679,7 @@ export function Dashboard() {
               <button
                 type="button"
                 onClick={() => setLanguageFilter('all')}
-                className={`px-3.5 py-1.5 text-[11px] font-semibold transition-all duration-150 ${
+                className={`px-3.5 py-1.5 text-[13px] font-semibold transition-all duration-150 ${
                   languageFilter === 'all'
                     ? 'bg-[var(--brand-primary)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.10)] dark:text-[var(--text-primary)]'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -693,7 +693,7 @@ export function Dashboard() {
                   key={lang.id}
                   type="button"
                   onClick={() => setLanguageFilter(lang.id)}
-                  className={`px-3.5 py-1.5 text-[11px] font-semibold transition-all duration-150 ${
+                  className={`px-3.5 py-1.5 text-[13px] font-semibold transition-all duration-150 ${
                     languageFilter === lang.id
                       ? 'bg-[var(--brand-primary)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.10)] dark:text-[var(--text-primary)]'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -710,8 +710,8 @@ export function Dashboard() {
             className="
               mt-3.5
               flex items-center justify-between
-              text-[11px]
-              text-[var(--text-muted)]
+              text-[13px]
+              text-[var(--text-secondary)]
             "
           >
             <span>
@@ -821,9 +821,9 @@ export function Dashboard() {
                 className="
                   mx-auto mt-2.5
                   max-w-sm
-                  text-[12px]
+                  text-[14px]
                   leading-6
-                  text-[var(--text-muted)]
+                  text-[var(--text-secondary)]
                 "
               >
                 {workspaces.length === 0
@@ -847,7 +847,7 @@ export function Dashboard() {
                     flex items-center gap-2
                     bg-[var(--brand-accent)]
                     px-4 py-2.5
-                    text-[11px]
+                    text-[13px]
                     font-semibold
                     text-white
                     transition-all duration-200
@@ -877,7 +877,7 @@ export function Dashboard() {
                       border border-[var(--border-strong)]
                       bg-[var(--surface)]
                       px-4 py-2.5
-                      text-[11px]
+                      text-[13px]
                       font-semibold
                       text-[var(--text-secondary)]
                       transition-all duration-200
@@ -971,11 +971,11 @@ export function Dashboard() {
               border border-[var(--border)]
               bg-[var(--surface)]
               px-3 py-2.5
-              text-[12px]
+              text-[14px]
               text-[var(--text-primary)]
               outline-none
               transition-all duration-200
-              placeholder:text-[var(--text-muted)]
+              placeholder:text-[var(--text-secondary)]
               hover:border-[var(--border-strong)]
               focus:border-[var(--brand-accent)]
               focus:shadow-[0_0_0_3px_rgba(122,81,56,0.10)]
@@ -989,7 +989,7 @@ export function Dashboard() {
               className="
                 border border-[var(--border-strong)]
                 px-3.5 py-2
-                text-[11px]
+                text-[13px]
                 font-semibold
                 text-[var(--text-secondary)]
                 transition-all duration-200
@@ -1006,7 +1006,7 @@ export function Dashboard() {
               className="
                 bg-[var(--brand-accent)]
                 px-4 py-2
-                text-[11px]
+                text-[13px]
                 font-semibold
                 text-white
                 transition-all duration-200
@@ -1034,7 +1034,7 @@ export function Dashboard() {
       >
         <p
           className="
-            text-[12px]
+            text-[14px]
             leading-6
             text-[var(--text-secondary)]
           "
@@ -1054,7 +1054,7 @@ export function Dashboard() {
             className="
               border border-[var(--border-strong)]
               px-3.5 py-2
-              text-[11px]
+              text-[13px]
               font-semibold
               text-[var(--text-secondary)]
               transition-all duration-200
@@ -1072,7 +1072,7 @@ export function Dashboard() {
             className="
               bg-[#9f4b43]
               px-4 py-2
-              text-[11px]
+              text-[13px]
               font-semibold
               text-white
               transition-all duration-200

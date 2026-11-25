@@ -118,7 +118,19 @@ const envSchema = z.object({
   ]).default('development'),
 
   FRONTEND_URL: z.string()
-    .url('FRONTEND_URL must be a valid URL')
+    .min(1, 'FRONTEND_URL must contain at least one allowed origin')
+    .refine(
+      (value) =>
+        value.split(',').every((entry) => {
+          try {
+            const parsedUrl = new URL(entry.trim());
+            return ['http:', 'https:'].includes(parsedUrl.protocol);
+          } catch {
+            return false;
+          }
+        }),
+      'FRONTEND_URL must be a comma-separated list of valid HTTP(S) origins',
+    )
     .default('http://localhost:3000'),
 
   VITE_API_URL: z.string()

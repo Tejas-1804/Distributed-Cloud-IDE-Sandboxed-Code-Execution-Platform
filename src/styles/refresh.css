@@ -1,0 +1,143 @@
+/* Cloud IDE visual refresh — cool neutral surfaces with indigo accents. */
+:root {
+  color-scheme: light;
+  --brand-primary: #28365f;
+  --brand-accent: #5865e8;
+  --brand-accent-hover: #4652d6;
+  --brand-accent-soft: rgba(88, 101, 232, 0.11);
+  --app-bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-raised: #f8f9fd;
+  --surface-hover: #eef1ff;
+  --surface-active: #e5e9ff;
+  --border: #e1e5ef;
+  --border-subtle: #edf0f6;
+  --border-strong: #cbd2e2;
+  --text-primary: #172033;
+  --text-secondary: #59647a;
+  --text-muted: #8490a5;
+  --text-disabled: #aeb6c5;
+  --success: #16845b;
+  --warning: #b7791f;
+  --danger: #c24152;
+  --shadow-sm: 0 1px 2px rgba(25, 38, 72, 0.05);
+  --shadow-md: 0 12px 32px rgba(25, 38, 72, 0.09);
+}
+
+html.dark {
+  color-scheme: dark;
+  --brand-primary: #111a35;
+  --brand-accent: #8794ff;
+  --brand-accent-hover: #a0aaff;
+  --brand-accent-soft: rgba(135, 148, 255, 0.14);
+  --app-bg: #0b1020;
+  --surface: #11182a;
+  --surface-raised: #172138;
+  --surface-hover: #1d2945;
+  --surface-active: #27345a;
+  --border: #2a3651;
+  --border-subtle: #202b42;
+  --border-strong: #3a496b;
+  --text-primary: #edf1ff;
+  --text-secondary: #b0bad0;
+  --text-muted: #8290ad;
+  --text-disabled: #5c6984;
+  --success: #4cc69a;
+  --warning: #e5b45d;
+  --danger: #ff7b8c;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 14px 38px rgba(0, 0, 0, 0.28);
+}
+
+html, body {
+  background: var(--app-bg);
+  color: var(--text-primary);
+}
+
+body {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+::selection {
+  background: rgba(99, 112, 239, 0.24);
+  color: var(--text-primary);
+}
+
+button, a, input, textarea, select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible,
+textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+
+.app-card, .app-surface, .app-surface-raised {
+  transition: background-color 160ms ease, border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.app-card {
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.app-card-interactive:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.app-button {
+  border-radius: 9px;
+  min-height: 36px;
+}
+
+.app-button-primary {
+  box-shadow: 0 4px 12px rgba(88, 101, 232, 0.2);
+}
+
+.app-button-primary:hover {
+  box-shadow: 0 7px 18px rgba(88, 101, 232, 0.26);
+}
+
+.app-input {
+  border-radius: 9px;
+}
+
+.ide-panel {
+  background: var(--surface);
+}
+
+.ide-panel-header {
+  letter-spacing: 0.075em;
+}
+
+.ide-tab-active::after {
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+
+.editor-container {
+  background: #111827;
+}
+
+.terminal {
+  background: #0b1220;
+  color: #dbe5f5;
+}
+
+html.dark .terminal {
+  background: #080d18;
+}
+
+@media (max-width: 640px) {
+  .app-card {
+    border-radius: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-card, .app-surface, .app-surface-raised, .app-button {
+    transition: none;
+  }
+}

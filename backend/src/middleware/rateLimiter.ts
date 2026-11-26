@@ -38,6 +38,7 @@ function rateLimit({ windowMs, max, message, keyGenerator }: RateLimitOptions) {
     }
 
     entry.count += 1;
+
     const remaining = Math.max(0, max - entry.count);
     const resetSeconds = Math.ceil((entry.resetAt - now) / 1000);
 
@@ -47,16 +48,31 @@ function rateLimit({ windowMs, max, message, keyGenerator }: RateLimitOptions) {
       return;
     }
 
-    if (true) {
-      res.setHeader('RateLimit-Policy', `${max};w=${Math.ceil(windowMs / 1000)}`);
-      res.setHeader('RateLimit-Limit', max);
-      res.setHeader('RateLimit-Remaining', remaining);
-      res.setHeader('RateLimit-Reset', resetSeconds);
-    }
+    res.setHeader(
+      'RateLimit-Policy',
+      `${max};w=${Math.ceil(windowMs / 1000)}`
+    );
+    res.setHeader('RateLimit-Limit', max);
+    res.setHeader('RateLimit-Remaining', remaining);
+    res.setHeader('RateLimit-Reset', resetSeconds);
 
     next();
   };
 }
+
+export const apiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isTest ? 1000 : 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many API requests. Please try again shortly.',
+    error: {
+      code: 'API_RATE_LIMIT_EXCEEDED',
+    },
+  },
+});
 
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -73,9 +89,10 @@ export const authRateLimiter = rateLimit({
 });
 
 export const executionRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: env.NODE_ENV === 'test' ? 1000 : 10,
-  keyGenerator: (req: Request) => req.user?._id.toString() ?? req.ip ?? 'unknown',
+  windowMs: 60 * 1000,
+  max: isTest ? 1000 : 10,
+  keyGenerator: (req: Request) =>
+    req.user?._id.toString() ?? req.ip ?? 'unknown',
   standardHeaders: true,
   legacyHeaders: false,
   message: {

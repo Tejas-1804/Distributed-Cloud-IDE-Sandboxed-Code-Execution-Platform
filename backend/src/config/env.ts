@@ -1,4 +1,3 @@
-
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -36,9 +35,6 @@ const isProd = resolvedNodeEnv === 'production';
 // ---------------------------------------------------------
 // JWT fallback secrets
 // ---------------------------------------------------------
-
-// Development/test only.
-// Production must provide both JWT secrets.
 
 const fallbackAccessSecret = isTest
   ? 'test_access_secret_key_for_vitest_only_123456789'
@@ -87,7 +83,10 @@ const devAccessMode =
 // JWT configuration validation
 // ---------------------------------------------------------
 
-if (!isTest && (!rawAccessSecret || !rawRefreshSecret)) {
+if (
+  !isTest &&
+  (!rawAccessSecret || !rawRefreshSecret)
+) {
   if (isProd) {
     throw new Error(
       '[Env] JWT_ACCESS_SECRET and JWT_REFRESH_SECRET are required in production.',
@@ -104,52 +103,123 @@ if (!isTest && (!rawAccessSecret || !rawRefreshSecret)) {
 // ---------------------------------------------------------
 
 const envSchema = z.object({
+  // -------------------------------------------------------
   // Application
+  // -------------------------------------------------------
+
   PORT: z.coerce
     .number()
     .int()
     .positive()
     .default(4000),
 
-  NODE_ENV: z.enum([
-    'development',
-    'production',
-    'test',
-  ]).default('development'),
+  NODE_ENV: z
+    .enum([
+      'development',
+      'production',
+      'test',
+    ])
+    .default('development'),
 
-  FRONTEND_URL: z.string()
+  FRONTEND_URL: z
+    .string()
     .url('FRONTEND_URL must be a valid URL')
     .default('http://localhost:3000'),
 
-  VITE_API_URL: z.string()
+  VITE_API_URL: z
+    .string()
     .url('VITE_API_URL must be a valid URL')
     .default('http://localhost:4000/api'),
 
+  // -------------------------------------------------------
   // Database
-  MONGODB_URI: z.string().default(''),
+  // -------------------------------------------------------
 
+  MONGODB_URI: z
+    .string()
+    .default(''),
+
+  // -------------------------------------------------------
   // Authentication
-  JWT_ACCESS_SECRET: z.string()
-    .min(16, 'JWT_ACCESS_SECRET must be at least 16 characters'),
+  // -------------------------------------------------------
 
-  JWT_REFRESH_SECRET: z.string()
-    .min(16, 'JWT_REFRESH_SECRET must be at least 16 characters'),
+  JWT_ACCESS_SECRET: z
+    .string()
+    .min(
+      16,
+      'JWT_ACCESS_SECRET must be at least 16 characters',
+    ),
 
-  ACCESS_TOKEN_EXPIRY: z.string()
+  JWT_REFRESH_SECRET: z
+    .string()
+    .min(
+      16,
+      'JWT_REFRESH_SECRET must be at least 16 characters',
+    ),
+
+  ACCESS_TOKEN_EXPIRY: z
+    .string()
     .min(1)
     .default('15m'),
 
-  REFRESH_TOKEN_EXPIRY: z.string()
+  REFRESH_TOKEN_EXPIRY: z
+    .string()
     .min(1)
     .default('7d'),
 
-  DEV_ACCESS_MODE: z.boolean().default(false),
+  DEV_ACCESS_MODE: z
+    .boolean()
+    .default(false),
 
+  // -------------------------------------------------------
   // AI integration
-  GEMINI_API_KEY: z.string().default(''),
+  // -------------------------------------------------------
 
-  // Docker / Terminal
-  DOCKER_SOCKET_PATH: z.string().default(''),
+  GEMINI_API_KEY: z
+    .string()
+    .default(''),
+
+  // -------------------------------------------------------
+  // Docker / Execution
+  // -------------------------------------------------------
+
+  DOCKER_SOCKET_PATH: z
+    .string()
+    .default(''),
+
+  EXECUTION_MAX_CONCURRENT_PER_USER: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(3),
+
+  EXECUTION_MAX_OUTPUT_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1_048_576),
+
+  EXECUTION_HISTORY_SUMMARY_CHARS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(4000),
+
+  EXECUTION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(30_000),
+
+  EXECUTION_COMPILE_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(30_000),
+
+  // -------------------------------------------------------
+  // Terminal
+  // -------------------------------------------------------
 
   TERMINAL_MAX_SESSIONS_PER_USER: z.coerce
     .number()
@@ -181,7 +251,26 @@ const envSchema = z.object({
     .positive()
     .default(250),
 
+  // -------------------------------------------------------
+  // LSP
+  // -------------------------------------------------------
+
+  LSP_IDLE_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10 * 60 * 1000),
+
+  LSP_MAX_PROCESSES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10),
+
+  // -------------------------------------------------------
   // Container resource limits
+  // -------------------------------------------------------
+
   CONTAINER_MEMORY_LIMIT_MB: z.coerce
     .number()
     .int()
@@ -215,16 +304,23 @@ const envSchema = z.object({
     .positive()
     .default(60 * 60 * 1000),
 
-  CONTAINER_NETWORK_MODE: z.string().default('none'),
+  CONTAINER_NETWORK_MODE: z
+    .string()
+    .default('none'),
 
-  CONTAINER_READONLY_ROOTFS: z.boolean().default(false),
+  CONTAINER_READONLY_ROOTFS: z
+    .boolean()
+    .default(false),
 });
 
 // ---------------------------------------------------------
 // Development security warning
 // ---------------------------------------------------------
 
-if (devAccessMode && resolvedNodeEnv === 'development') {
+if (
+  devAccessMode &&
+  resolvedNodeEnv === 'development'
+) {
   console.warn(
     '[Security] DEV_ACCESS_MODE is active for local single-user development.',
   );
@@ -235,6 +331,7 @@ if (devAccessMode && resolvedNodeEnv === 'development') {
 // ---------------------------------------------------------
 
 const parsed = envSchema.safeParse({
+  // Application
   PORT: process.env.PORT,
 
   NODE_ENV: resolvedNodeEnv,
@@ -243,13 +340,17 @@ const parsed = envSchema.safeParse({
 
   VITE_API_URL: viteApiUrl,
 
+  // Database
   MONGODB_URI: mongodbUri,
 
+  // Authentication
   JWT_ACCESS_SECRET:
-    rawAccessSecret || fallbackAccessSecret,
+    rawAccessSecret ||
+    fallbackAccessSecret,
 
   JWT_REFRESH_SECRET:
-    rawRefreshSecret || fallbackRefreshSecret,
+    rawRefreshSecret ||
+    fallbackRefreshSecret,
 
   ACCESS_TOKEN_EXPIRY:
     process.env.ACCESS_TOKEN_EXPIRY,
@@ -257,13 +358,33 @@ const parsed = envSchema.safeParse({
   REFRESH_TOKEN_EXPIRY:
     process.env.REFRESH_TOKEN_EXPIRY,
 
-  DEV_ACCESS_MODE: devAccessMode,
+  DEV_ACCESS_MODE:
+    devAccessMode,
 
-  GEMINI_API_KEY: geminiApiKey,
+  // AI
+  GEMINI_API_KEY:
+    geminiApiKey,
 
+  // Docker / Execution
   DOCKER_SOCKET_PATH:
     process.env.DOCKER_SOCKET_PATH?.trim() ?? '',
 
+  EXECUTION_MAX_CONCURRENT_PER_USER:
+    process.env.EXECUTION_MAX_CONCURRENT_PER_USER,
+
+  EXECUTION_MAX_OUTPUT_BYTES:
+    process.env.EXECUTION_MAX_OUTPUT_BYTES,
+
+  EXECUTION_HISTORY_SUMMARY_CHARS:
+    process.env.EXECUTION_HISTORY_SUMMARY_CHARS,
+
+  EXECUTION_TIMEOUT_MS:
+    process.env.EXECUTION_TIMEOUT_MS,
+
+  EXECUTION_COMPILE_TIMEOUT_MS:
+    process.env.EXECUTION_COMPILE_TIMEOUT_MS,
+
+  // Terminal
   TERMINAL_MAX_SESSIONS_PER_USER:
     process.env.TERMINAL_MAX_SESSIONS_PER_USER,
 
@@ -279,6 +400,14 @@ const parsed = envSchema.safeParse({
   TERMINAL_INPUT_RATE_LIMIT_PER_SEC:
     process.env.TERMINAL_INPUT_RATE_LIMIT_PER_SEC,
 
+  // LSP
+  LSP_IDLE_TIMEOUT_MS:
+    process.env.LSP_IDLE_TIMEOUT_MS,
+
+  LSP_MAX_PROCESSES:
+    process.env.LSP_MAX_PROCESSES,
+
+  // Containers
   CONTAINER_MEMORY_LIMIT_MB:
     process.env.CONTAINER_MEMORY_LIMIT_MB,
 
@@ -295,10 +424,13 @@ const parsed = envSchema.safeParse({
     process.env.CONTAINER_IDLE_TIMEOUT_MS,
 
   CONTAINER_NETWORK_MODE:
-    process.env.CONTAINER_NETWORK_MODE?.trim() || 'none',
+    process.env.CONTAINER_NETWORK_MODE?.trim() ||
+    'none',
 
   CONTAINER_READONLY_ROOTFS:
-    process.env.CONTAINER_READONLY_ROOTFS?.trim().toLowerCase() === 'true',
+    process.env.CONTAINER_READONLY_ROOTFS
+      ?.trim()
+      .toLowerCase() === 'true',
 });
 
 // ---------------------------------------------------------
@@ -308,9 +440,10 @@ const parsed = envSchema.safeParse({
 if (!parsed.success) {
   const details = parsed.error.issues
     .map((issue) => {
-      const field = issue.path.length
-        ? issue.path.join('.')
-        : 'environment';
+      const field =
+        issue.path.length > 0
+          ? issue.path.join('.')
+          : 'environment';
 
       return `  - ${field}: ${issue.message}`;
     })
@@ -332,43 +465,86 @@ export const env = parsed.data;
 // ---------------------------------------------------------
 
 if (!isProd && !isTest) {
-  console.log(`[Env] Environment loaded from: ${envFile}`);
-  console.log(`[Env] NODE_ENV: ${env.NODE_ENV}`);
-  console.log(`[Env] Backend port: ${env.PORT}`);
-  console.log(`[Env] Frontend URL: ${env.FRONTEND_URL}`);
-  console.log(`[Env] API URL: ${env.VITE_API_URL}`);
+  console.log(
+    `[Env] Environment loaded from: ${envFile}`,
+  );
+
+  console.log(
+    `[Env] NODE_ENV: ${env.NODE_ENV}`,
+  );
+
+  console.log(
+    `[Env] Backend port: ${env.PORT}`,
+  );
+
+  console.log(
+    `[Env] Frontend URL: ${env.FRONTEND_URL}`,
+  );
+
+  console.log(
+    `[Env] API URL: ${env.VITE_API_URL}`,
+  );
 
   console.log(
     `[Env] JWT access secret: ${
-      rawAccessSecret ? 'configured' : 'development fallback'
+      rawAccessSecret
+        ? 'configured'
+        : 'development fallback'
     }`,
   );
 
   console.log(
     `[Env] JWT refresh secret: ${
-      rawRefreshSecret ? 'configured' : 'development fallback'
+      rawRefreshSecret
+        ? 'configured'
+        : 'development fallback'
     }`,
   );
 
   console.log(
     `[Env] MongoDB: ${
-      env.MONGODB_URI ? 'configured' : 'embedded/fallback database'
+      env.MONGODB_URI
+        ? 'configured'
+        : 'embedded/fallback database'
     }`,
   );
 
   console.log(
     `[Env] Gemini API: ${
-      env.GEMINI_API_KEY ? 'configured' : 'not configured'
+      env.GEMINI_API_KEY
+        ? 'configured'
+        : 'not configured'
     }`,
   );
 
   console.log(
     `[Env] Docker socket: ${
-      env.DOCKER_SOCKET_PATH || 'default'
+      env.DOCKER_SOCKET_PATH ||
+      'default'
     }`,
   );
 
   console.log(
-    `[Env] Development access mode: ${env.DEV_ACCESS_MODE}`,
+    `[Env] Development access mode: ${
+      env.DEV_ACCESS_MODE
+    }`,
+  );
+
+  console.log(
+    `[Env] Max concurrent executions/user: ${
+      env.EXECUTION_MAX_CONCURRENT_PER_USER
+    }`,
+  );
+
+  console.log(
+    `[Env] Execution timeout: ${
+      env.EXECUTION_TIMEOUT_MS
+    }ms`,
+  );
+
+  console.log(
+    `[Env] LSP max processes: ${
+      env.LSP_MAX_PROCESSES
+    }`,
   );
 }

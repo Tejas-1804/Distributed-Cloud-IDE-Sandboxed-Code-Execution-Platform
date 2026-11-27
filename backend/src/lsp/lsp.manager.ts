@@ -1,744 +1,2077 @@
-import path from 'path';
-import ts from 'typescript';
-import { env } from '../config/env.js';
-import { AppError } from '../utils/AppError.js';
-import { getLspLanguageConfig, isBinaryAvailable } from './language.config.js';
+import path from 'node:path';
+import { createRequire } from 'node:module';
 import type {
   LspCodeAction,
-  LspCompletionItem,
-  LspDiagnostic,
-  LspHoverResult,
   LspLanguage,
-  LspLocation,
-  LspPosition,
   LspRange,
-  LspSessionState,
 } from './lsp.types.js';
 
-const PYTHON_KEYWORDS = [
-  'def',
-  'class',
-  'return',
-  'import',
-  'from',
-  'as',
-  'if',
-  'elif',
-  'else',
-  'for',
-  'while',
-  'break',
-  'continue',
-  'try',
-  'except',
-  'finally',
-  'with',
-  'yield',
-  'async',
-  'await',
-  'lambda',
-  'True',
-  'False',
-  'None',
-];
-
-const PYTHON_BUILTINS: Record<string, string> = {
-  print: 'print(*values, sep=" ", end="\\n") -> None\nPrints values to standard output.',
-  len: 'len(obj) -> int\nReturn the number of items in a container.',
-  range: 'range(start, stop[, step]) -> range object\nGenerate an immutable sequence of integers.',
-  enumerate: 'enumerate(iterable, start=0) -> iterator of (index, value)',
-  str: 'str(object="") -> str\nCreate a new string object from the given object.',
-  int: 'int(x=0) -> integer\nConvert a number or string to an integer.',
-  float: 'float(x=0) -> floating point number',
-  list: 'list(iterable=()) -> list\nBuilt-in mutable sequence.',
-  dict: 'dict(**kwargs) -> new dictionary',
-  set: 'set(iterable=()) -> new empty or populated set',
-  sum: 'sum(iterable, start=0) -> number',
-  sorted: 'sorted(iterable, key=None, reverse=False) -> list',
-  open: 'open(file, mode="r") -> file object',
+type LspPosition = {
+  line: number;
+  character: number;
 };
 
-const C_CPP_KEYWORDS = [
-  'int',
-  'double',
-  'float',
-  'char',
-  'void',
-  'bool',
-  'std::cout',
-  'std::cin',
-  'std::vector',
-  'std::string',
-  'printf',
-  'scanf',
-  'return',
-  'struct',
-  'class',
-  'template',
-  'const',
-  'constexpr',
-];
+type LspDocument = {
+  uri: string;
+  fileName: string;
+  language: LspLanguage | string;
+  version: number;
+  text: string;
+};
 
-const JAVA_KEYWORDS = [
-  'public',
-  'private',
-  'protected',
-  'class',
-  'interface',
-  'static',
-  'void',
-  'int',
-  'String',
-  'System.out.println',
-  'return',
-  'final',
-  'new',
-  'import',
-];
+type LspSession = {
+  sessionId: string;
+  workspaceId: string;
+  language: LspLanguage | string;
+  rootPath: string;
+  documents: Map<string, LspDocument>;
+  createdAt: number;
+  lastActivityAt: number;
+};
 
-interface TsWorkspaceService {
-  service: ts.LanguageService;
-  versions: Map<string, number>;
-  contents: Map<string, string>;
-}
+type LspCompletion = {
+  label: string;
+  kind?: string;
+  detail?: string;
+  insertText?: string;
+};
 
-function positionToOffset(text: string, pos: LspPosition): number {
-  const lines = text.split('\n');
-  const clampedLine = Math.max(0, Math.min(pos.line, lines.length - 1));
-  let offset = 0;
-  for (let i = 0; i < clampedLine; i++) {
-    offset += lines[i].length + 1;
-  }
-  return offset + Math.max(0, Math.min(pos.character, lines[clampedLine]?.length ?? 0));
-}
+type LspHover = {
+  contents: string;
+  start?: number;
+  length?: number;
+};
 
-function offsetToPosition(text: string, offset: number): LspPosition {
-  const safeOffset = Math.max(0, Math.min(offset, text.length));
-  const prefix = text.slice(0, safeOffset);
-  const lines = prefix.split('\n');
-  return {
-    line: lines.length - 1,
-    character: lines[lines.length - 1].length,
-  };
-}
+type LspDefinition = {
+  fileName: string;
+  start: number;
+  length: number;
+};
 
-function wordAtPosition(text: string, pos: LspPosition): string {
-  const lines = text.split('\n');
-  const lineText = lines[pos.line] ?? '';
-  let start = pos.character;
-  let end = pos.character;
-  while (start > 0 && /[A-Za-z0-9_$]/.test(lineText[start - 1])) start -= 1;
-  while (end < lineText.length && /[A-Za-z0-9_$]/.test(lineText[end])) end += 1;
-  return lineText.slice(start, end);
-}
+type LspReference = {
+  fileName: string;
+  start: number;
+  length: number;
+  line?: number;
+  column?: number;
+};
+
+type LspDiagnostic = {
+  message: string;
+  severity: number;
+  source?: string;
+  range: LspRange;
+  start?: number;
+  length?: number;
+  line?: number;
+  column?: number;
+};
+
+/**
+ * TypeScript is loaded at runtime instead of importing its internal
+ * type declarations directly.
+ *
+ * This avoids the project's current TypeScript resolver issue where
+ * `import ... from 'typescript'` is being resolved to `typescript/lib/version`.
+ */
+const require = createRequire(import.meta.url);
+const ts: any = require('typescript');
+
+type SessionWithVersions = LspSession & {
+  fileVersions: Map<string, number>;
+};
+
+type TsWorkspace = {
+  workspaceId: string;
+  rootPath: string;
+  documents: Map<string, LspDocument>;
+  service: any;
+};
+
+type InitialFile = {
+  path: string;
+  content: string;
+};
+
+type StartSessionOptions = {
+  sessionId?: string;
+  workspaceId: string;
+  userId?: string;
+  language: string;
+  rootPath?: string;
+  initialFiles?: InitialFile[];
+};
+
+type DocumentUpdate = {
+  sessionId: string;
+  uri: string;
+  text: string;
+  version?: number;
+  language?: string;
+};
+
+type PositionOrOffset = LspPosition | number;
 
 export class LspManager {
-  private sessions = new Map<string, LspSessionState>();
-  private tsServices = new Map<string, TsWorkspaceService>();
-  private sweepInterval: NodeJS.Timeout | null = null;
+  private readonly sessions = new Map<string, SessionWithVersions>();
+
+  private readonly tsWorkspaces = new Map<string, TsWorkspace>();
+
+  private readonly idleTimeoutMs = 30 * 60 * 1000;
+
+  private readonly cleanupTimer: ReturnType<typeof setInterval>;
 
   constructor() {
-    this.startIdleSweeper();
+    this.cleanupTimer = setInterval(
+      () => {
+        this.cleanupIdleSessions();
+      },
+      5 * 60 * 1000,
+    );
+
+    const timer = this.cleanupTimer as unknown as {
+      unref?: () => void;
+    };
+
+    timer.unref?.();
   }
 
-  private makeKey(workspaceId: string, language: LspLanguage): string {
-    return `${workspaceId}:${language}`;
-  }
+  /**
+   * Starts an LSP session.
+   *
+   * Supports both:
+   *   startSession(options)
+   *
+   * and the older:
+   *   startSession(sessionId, workspaceId, language, rootPath)
+   */
+  startSession(
+    optionsOrSessionId: StartSessionOptions | string,
+    workspaceId?: string,
+    language?: string,
+    rootPath = '/workspace',
+  ): LspSession {
+    const options: StartSessionOptions =
+      typeof optionsOrSessionId === 'string'
+        ? {
+            sessionId: optionsOrSessionId,
+            workspaceId: workspaceId ?? '',
+            language: language ?? 'plaintext',
+            rootPath,
+          }
+        : optionsOrSessionId;
 
-  startIdleSweeper(): void {
-    if (this.sweepInterval) return;
-    this.sweepInterval = setInterval(() => {
-      const now = Date.now();
-      for (const [key, session] of this.sessions.entries()) {
-        if (now - session.lastActivityAt > env.LSP_IDLE_TIMEOUT_MS) {
-          this.stopSessionByKey(key);
+    if (!options.workspaceId) {
+      throw new Error('LSP workspaceId is required');
+    }
+
+    const sessionId =
+      options.sessionId ??
+      `${options.workspaceId}:${options.language}`;
+
+    const existing = this.sessions.get(sessionId);
+
+    if (existing) {
+      existing.lastActivityAt = Date.now();
+
+      if (options.initialFiles?.length) {
+        for (const file of options.initialFiles) {
+          this.updateDocument({
+            sessionId,
+            uri: file.path,
+            text: file.content,
+            version: existing.fileVersions.get(
+              this.uriToFileName(
+                file.path,
+                existing.rootPath,
+              ),
+            ) ?? 1,
+            language: options.language,
+          });
         }
       }
-    }, 60_000);
-    this.sweepInterval.unref();
+
+      return this.toPublicSession(existing);
+    }
+
+    const session: SessionWithVersions = {
+      sessionId,
+      workspaceId: options.workspaceId,
+      language: options.language,
+      rootPath: options.rootPath ?? '/workspace',
+      documents: new Map<string, LspDocument>(),
+      fileVersions: new Map<string, number>(),
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+    };
+
+    this.sessions.set(sessionId, session);
+
+    if (this.isTypeScriptLanguage(session.language)) {
+      this.ensureTsWorkspace(
+        session.workspaceId,
+        session.rootPath,
+      );
+    }
+
+    if (options.initialFiles?.length) {
+      for (const file of options.initialFiles) {
+        this.updateDocument({
+          sessionId,
+          uri: file.path,
+          text: file.content,
+          version: 1,
+          language: options.language,
+        });
+      }
+    }
+
+    return this.toPublicSession(session);
+  }
+
+  /**
+   * Gets a session by:
+   *   getSession(sessionId)
+   *
+   * or:
+   *   getSession(workspaceId, language)
+   */
+  getSession(
+    sessionOrWorkspaceId: string,
+    language?: string,
+  ): LspSession | undefined {
+    if (language !== undefined) {
+      for (const session of this.sessions.values()) {
+        if (
+          session.workspaceId === sessionOrWorkspaceId &&
+          session.language === language
+        ) {
+          session.lastActivityAt = Date.now();
+          return this.toPublicSession(session);
+        }
+      }
+
+      return undefined;
+    }
+
+    const byId = this.sessions.get(sessionOrWorkspaceId);
+
+    if (byId) {
+      byId.lastActivityAt = Date.now();
+      return this.toPublicSession(byId);
+    }
+
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId === sessionOrWorkspaceId) {
+        session.lastActivityAt = Date.now();
+        return this.toPublicSession(session);
+      }
+    }
+
+    return undefined;
+  }
+
+  getSessionById(
+    sessionId: string,
+  ): LspSession | undefined {
+    const session = this.sessions.get(sessionId);
+
+    if (!session) {
+      return undefined;
+    }
+
+    session.lastActivityAt = Date.now();
+
+    return this.toPublicSession(session);
+  }
+
+  /**
+   * Updates a document.
+   *
+   * Supported forms:
+   *
+   *   updateDocument({
+   *     sessionId,
+   *     uri,
+   *     text
+   *   })
+   *
+   *   updateDocument(sessionId, uri, text, version)
+   *
+   *   updateDocument(session, uri, text, version)
+   */
+  updateDocument(
+    updateOrSessionId:
+      | DocumentUpdate
+      | string
+      | LspSession,
+    uri?: string,
+    text?: string,
+    version?: number,
+    language?: string,
+  ): void {
+    let update: DocumentUpdate;
+
+    if (typeof updateOrSessionId === 'string') {
+      update = {
+        sessionId: updateOrSessionId,
+        uri: uri ?? '',
+        text: text ?? '',
+        version,
+        language,
+      };
+    } else if (this.isSession(updateOrSessionId)) {
+      update = {
+        sessionId: updateOrSessionId.sessionId,
+        uri: uri ?? '',
+        text: text ?? '',
+        version,
+        language,
+      };
+    } else {
+      update = updateOrSessionId;
+    }
+
+    if (!update.sessionId) {
+      throw new Error('LSP sessionId is required');
+    }
+
+    if (!update.uri) {
+      throw new Error('LSP document uri is required');
+    }
+
+    const session =
+      this.sessions.get(update.sessionId);
+
+    if (!session) {
+      throw new Error(
+        `LSP session not found: ${update.sessionId}`,
+      );
+    }
+
+    const documentUri = update.uri;
+
+    const fileName =
+      this.uriToFileName(
+        documentUri,
+        session.rootPath,
+      );
+
+    const previous =
+      session.documents.get(
+        documentUri,
+      );
+
+    const nextVersion =
+      update.version ??
+      ((previous?.version ?? 0) + 1);
+
+    const document: LspDocument = {
+      uri: documentUri,
+      fileName,
+      language:
+        update.language ??
+        previous?.language ??
+        session.language,
+      version: nextVersion,
+      text: update.text,
+    };
+
+    session.documents.set(
+      documentUri,
+      document,
+    );
+
+    session.fileVersions.set(
+      fileName,
+      nextVersion,
+    );
+
+    session.lastActivityAt =
+      Date.now();
+
+    if (
+      this.isTypeScriptLanguage(
+        document.language,
+      )
+    ) {
+      const workspace =
+        this.ensureTsWorkspace(
+          session.workspaceId,
+          session.rootPath,
+        );
+
+      workspace.documents.set(
+        fileName,
+        document,
+      );
+    }
+  }
+
+  syncTsWorkspace(
+    workspaceId: string,
+    rootPath: string,
+    documents:
+      | LspDocument[]
+      | Map<string, LspDocument> = [],
+  ): void {
+    const workspace =
+      this.ensureTsWorkspace(
+        workspaceId,
+        rootPath,
+      );
+
+    workspace.documents.clear();
+
+    if (documents instanceof Map) {
+      for (
+        const [
+          fileName,
+          document,
+        ] of documents
+      ) {
+        workspace.documents.set(
+          fileName,
+          document,
+        );
+      }
+
+      return;
+    }
+
+    for (const document of documents) {
+      workspace.documents.set(
+        document.fileName,
+        document,
+      );
+    }
+  }
+
+  getDiagnostics(
+    sessionOrId:
+      | string
+      | LspSession,
+    uri?: string,
+  ): LspDiagnostic[] {
+    const session =
+      this.requireInternalSession(
+        this.getSessionId(
+          sessionOrId,
+        ),
+      );
+
+    session.lastActivityAt =
+      Date.now();
+
+    const document =
+      this.getDocument(
+        session,
+        uri,
+      );
+
+    if (!document) {
+      return [];
+    }
+
+    if (
+      this.isTypeScriptLanguage(
+        document.language,
+      )
+    ) {
+      return this.getTypeScriptDiagnostics(
+        session,
+        document,
+      );
+    }
+
+    return this.getBasicDiagnostics(
+      document,
+    );
+  }
+
+  getCompletions(
+    sessionOrId:
+      | string
+      | LspSession,
+    uri: string,
+    position:
+      | LspPosition
+      | number,
+    character?: number,
+  ): LspCompletion[] {
+    const session =
+      this.requireInternalSession(
+        this.getSessionId(
+          sessionOrId,
+        ),
+      );
+
+    session.lastActivityAt =
+      Date.now();
+
+    const document =
+      this.getDocument(
+        session,
+        uri,
+      );
+
+    if (!document) {
+      return [];
+    }
+
+    const normalizedPosition =
+      this.normalizePosition(
+        position,
+        character,
+      );
+
+    if (
+      this.isTypeScriptLanguage(
+        document.language,
+      )
+    ) {
+      return this.getTypeScriptCompletions(
+        session,
+        document,
+        normalizedPosition,
+      );
+    }
+
+    return this.getKeywordCompletions(
+      document.language,
+    );
+  }
+
+  getHover(
+    sessionOrId:
+      | string
+      | LspSession,
+    uri: string,
+    position:
+      | LspPosition
+      | number,
+    character?: number,
+  ): LspHover | null {
+    const session =
+      this.requireInternalSession(
+        this.getSessionId(
+          sessionOrId,
+        ),
+      );
+
+    session.lastActivityAt =
+      Date.now();
+
+    const document =
+      this.getDocument(
+        session,
+        uri,
+      );
+
+    if (
+      !document ||
+      !this.isTypeScriptLanguage(
+        document.language,
+      )
+    ) {
+      return null;
+    }
+
+    const workspace =
+      this.ensureTsWorkspace(
+        session.workspaceId,
+        session.rootPath,
+      );
+
+    const offset =
+      this.positionToOffset(
+        document.text,
+        this.normalizePosition(
+          position,
+          character,
+        ),
+      );
+
+    const info =
+      workspace.service.getQuickInfoAtPosition(
+        document.fileName,
+        offset,
+      );
+
+    if (!info) {
+      return null;
+    }
+
+    const display =
+      ts.displayPartsToString(
+        info.displayParts ?? [],
+      );
+
+    const documentation =
+      ts.displayPartsToString(
+        info.documentation ?? [],
+      );
+
+    return {
+      contents:
+        documentation
+          ? `${display}\n\n${documentation}`
+          : display,
+      start:
+        info.textSpan.start,
+      length:
+        info.textSpan.length,
+    };
+  }
+
+  getDefinition(
+    sessionOrId:
+      | string
+      | LspSession,
+    uri: string,
+    position:
+      | LspPosition
+      | number,
+    character?: number,
+  ): LspDefinition[] {
+    const session =
+      this.requireInternalSession(
+        this.getSessionId(
+          sessionOrId,
+        ),
+      );
+
+    session.lastActivityAt =
+      Date.now();
+
+    const document =
+      this.getDocument(
+        session,
+        uri,
+      );
+
+    if (
+      !document ||
+      !this.isTypeScriptLanguage(
+        document.language,
+      )
+    ) {
+      return [];
+    }
+
+    const workspace =
+      this.ensureTsWorkspace(
+        session.workspaceId,
+        session.rootPath,
+      );
+
+    const offset =
+      this.positionToOffset(
+        document.text,
+        this.normalizePosition(
+          position,
+          character,
+        ),
+      );
+
+    const definitions =
+      workspace.service.getDefinitionAtPosition(
+        document.fileName,
+        offset,
+      );
+
+    if (!definitions) {
+      return [];
+    }
+
+    return definitions.map(
+      (definition: any) => ({
+        fileName:
+          definition.fileName,
+        start:
+          definition.textSpan.start,
+        length:
+          definition.textSpan.length,
+      }),
+    );
+  }
+
+  getReferences(
+    sessionOrId:
+      | string
+      | LspSession,
+    uri: string,
+    position:
+      | LspPosition
+      | number,
+    character?: number,
+  ): LspReference[] {
+    const session =
+      this.requireInternalSession(
+        this.getSessionId(
+          sessionOrId,
+        ),
+      );
+
+    session.lastActivityAt =
+      Date.now();
+
+    const document =
+      this.getDocument(
+        session,
+        uri,
+      );
+
+    if (
+      !document ||
+      !this.isTypeScriptLanguage(
+        document.language,
+      )
+    ) {
+      return [];
+    }
+
+    const workspace =
+      this.ensureTsWorkspace(
+        session.workspaceId,
+        session.rootPath,
+      );
+
+    const offset =
+      this.positionToOffset(
+        document.text,
+        this.normalizePosition(
+          position,
+          character,
+        ),
+      );
+
+    const references =
+      workspace.service.getReferencesAtPosition(
+        document.fileName,
+        offset,
+      );
+
+    if (!references) {
+      return [];
+    }
+
+    return references.map(
+      (reference: any) => {
+        const text =
+          this.getTextForFile(
+            session,
+            reference.fileName,
+          );
+
+        const referencePosition =
+          this.offsetToPosition(
+            text,
+            reference.textSpan.start,
+          );
+
+        return {
+          fileName:
+            reference.fileName,
+          start:
+            reference.textSpan.start,
+          length:
+            reference.textSpan.length,
+          line:
+            referencePosition.line,
+          column:
+            referencePosition.character,
+        };
+      },
+    );
+  }
+
+  getCodeActions(
+    sessionOrId:
+      | string
+      | LspSession,
+    uri: string,
+    rangeOrStart:
+      | LspRange
+      | number,
+    end?: number,
+  ): LspCodeAction[] {
+    const session =
+      this.requireInternalSession(
+        this.getSessionId(
+          sessionOrId,
+        ),
+      );
+
+    session.lastActivityAt =
+      Date.now();
+
+    const document =
+      this.getDocument(
+        session,
+        uri,
+      );
+
+    if (
+      !document ||
+      !this.isTypeScriptLanguage(
+        document.language,
+      )
+    ) {
+      return [];
+    }
+
+    const range =
+      this.normalizeRange(
+        document.text,
+        rangeOrStart,
+        end,
+      );
+
+    const workspace =
+      this.ensureTsWorkspace(
+        session.workspaceId,
+        session.rootPath,
+      );
+
+    const fixes =
+      workspace.service.getCodeFixesAtPosition(
+        document.fileName,
+        range.start,
+        range.end,
+        [],
+        this.getCompilerOptions(),
+        {},
+      );
+
+    return fixes.map(
+      (fix: any) => ({
+        title:
+          fix.description,
+        kind:
+          'quickfix',
+        command:
+          fix.commands?.[0]
+            ? {
+                title:
+                  fix.commands[0]
+                    .title,
+                command:
+                  fix.commands[0]
+                    .command,
+                arguments:
+                  fix.commands[0]
+                    .arguments,
+              }
+            : undefined,
+      }),
+    );
+  }
+
+  closeDocument(
+    sessionOrId:
+      | string
+      | LspSession,
+    uri: string,
+  ): void {
+    const session =
+      this.sessions.get(
+        this.getSessionId(
+          sessionOrId,
+        ),
+      );
+
+    if (!session) {
+      return;
+    }
+
+    const document =
+      session.documents.get(
+        uri,
+      );
+
+    session.documents.delete(
+      uri,
+    );
+
+    if (document) {
+      session.fileVersions.delete(
+        document.fileName,
+      );
+
+      const workspace =
+        this.tsWorkspaces.get(
+          session.workspaceId,
+        );
+
+      workspace?.documents.delete(
+        document.fileName,
+      );
+    }
+
+    session.lastActivityAt =
+      Date.now();
+
+    this.cleanupUnusedWorkspaces();
+  }
+
+  stopSession(
+    sessionId: string,
+  ): void {
+    const session =
+      this.sessions.get(
+        sessionId,
+      );
+
+    if (!session) {
+      return;
+    }
+
+    this.sessions.delete(
+      sessionId,
+    );
+
+    this.cleanupUnusedWorkspaces();
+  }
+
+  closeSession(
+    sessionId: string,
+  ): void {
+    this.stopSession(
+      sessionId,
+    );
+  }
+
+  stopWorkspaceLanguage(
+    workspaceId: string,
+    language?: string,
+  ): void {
+    const sessionIds: string[] =
+      [];
+
+    for (
+      const [
+        sessionId,
+        session,
+      ] of this.sessions
+    ) {
+      if (
+        session.workspaceId !==
+        workspaceId
+      ) {
+        continue;
+      }
+
+      if (
+        language &&
+        session.language !==
+          language
+      ) {
+        continue;
+      }
+
+      sessionIds.push(
+        sessionId,
+      );
+    }
+
+    for (const sessionId of sessionIds) {
+      this.stopSession(
+        sessionId,
+      );
+    }
+
+    this.cleanupUnusedWorkspaces();
   }
 
   getActiveSessionCount(): number {
     return this.sessions.size;
   }
 
-  getSession(workspaceId: string, language: LspLanguage): LspSessionState | undefined {
-    return this.sessions.get(this.makeKey(workspaceId, language));
+  closeAll(): void {
+    for (
+      const workspace of
+        this.tsWorkspaces.values()
+    ) {
+      try {
+        workspace.service.dispose();
+      } catch {
+        // Ignore disposal errors.
+      }
+    }
+
+    this.tsWorkspaces.clear();
+    this.sessions.clear();
   }
 
-  startSession(params: {
-    workspaceId: string;
-    userId: string;
-    language: LspLanguage;
-    initialFiles: Array<{ path: string; content: string }>;
-  }): LspSessionState {
-    const key = this.makeKey(params.workspaceId, params.language);
-    const existing = this.sessions.get(key);
+  dispose(): void {
+    clearInterval(
+      this.cleanupTimer,
+    );
+
+    this.closeAll();
+  }
+
+  private ensureTsWorkspace(
+    workspaceId: string,
+    rootPath: string,
+  ): TsWorkspace {
+    const existing =
+      this.tsWorkspaces.get(
+        workspaceId,
+      );
+
     if (existing) {
-      existing.lastActivityAt = Date.now();
-      for (const f of params.initialFiles) {
-        if (!existing.fileContents.has(f.path)) {
-          existing.fileContents.set(f.path, f.content);
-          existing.fileVersions.set(f.path, 1);
+      return existing;
+    }
+
+    const documents =
+      new Map<string, LspDocument>();
+
+    const host: any = {
+      getCompilationSettings:
+        () =>
+          this.getCompilerOptions(),
+
+      getScriptFileNames:
+        () =>
+          Array.from(
+            documents.keys(),
+          ),
+
+      getScriptVersion:
+        (fileName: string) =>
+          String(
+            documents.get(
+              fileName,
+            )?.version ?? 0,
+          ),
+
+      getScriptSnapshot:
+        (fileName: string) => {
+          const document =
+            documents.get(
+              fileName,
+            );
+
+          if (document) {
+            return ts.ScriptSnapshot.fromString(
+              document.text,
+            );
+          }
+
+          const diskText =
+            ts.sys.readFile(
+              fileName,
+            );
+
+          if (
+            diskText ===
+            undefined
+          ) {
+            return undefined;
+          }
+
+          return ts.ScriptSnapshot.fromString(
+            diskText,
+          );
+        },
+
+      getCurrentDirectory:
+        () => rootPath,
+
+      getDefaultLibFileName:
+        (options: any) =>
+          ts.getDefaultLibFileName(
+            options,
+          ),
+
+      fileExists:
+        (fileName: string) =>
+          documents.has(
+            fileName,
+          ) ||
+          ts.sys.fileExists(
+            fileName,
+          ),
+
+      readFile:
+        (fileName: string) =>
+          documents.get(
+            fileName,
+          )?.text ??
+          ts.sys.readFile(
+            fileName,
+          ),
+
+      readDirectory:
+        (
+          directory: string,
+          extensions?: readonly string[],
+          exclude?: readonly string[],
+          include?: readonly string[],
+          depth?: number,
+        ) =>
+          ts.sys.readDirectory(
+            directory,
+            extensions,
+            exclude,
+            include,
+            depth,
+          ),
+
+      directoryExists:
+        (directory: string) =>
+          ts.sys.directoryExists(
+            directory,
+          ),
+
+      getDirectories:
+        (directory: string) =>
+          ts.sys.getDirectories(
+            directory,
+          ),
+    };
+
+    const service =
+      ts.createLanguageService(
+        host,
+        ts.createDocumentRegistry(),
+      );
+
+    const workspace: TsWorkspace =
+      {
+        workspaceId,
+        rootPath,
+        documents,
+        service,
+      };
+
+    this.tsWorkspaces.set(
+      workspaceId,
+      workspace,
+    );
+
+    return workspace;
+  }
+
+  private getCompilerOptions(): any {
+    const target =
+      ts.ScriptTarget?.ES2022 ??
+      ts.ScriptTarget?.ESNext ??
+      99;
+
+    const module =
+      ts.ModuleKind?.ESNext ??
+      ts.ModuleKind?.ES2020 ??
+      99;
+
+    const moduleResolution =
+      ts.ModuleResolutionKind?.Bundler ??
+      ts.ModuleResolutionKind?.NodeNext ??
+      ts.ModuleResolutionKind?.NodeJs ??
+      2;
+
+    const jsx =
+      ts.JsxEmit?.ReactJSX ??
+      ts.JsxEmit?.ReactJSXDev ??
+      ts.JsxEmit?.React ??
+      4;
+
+    return {
+      target,
+      module,
+      moduleResolution,
+      jsx,
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      allowJs: true,
+      checkJs: false,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports:
+        true,
+      resolveJsonModule:
+        true,
+    };
+  }
+
+  private getTypeScriptDiagnostics(
+    session: SessionWithVersions,
+    document: LspDocument,
+  ): LspDiagnostic[] {
+    const workspace =
+      this.ensureTsWorkspace(
+        session.workspaceId,
+        session.rootPath,
+      );
+
+    const diagnostics: any[] = [
+      ...workspace.service.getSyntacticDiagnostics(
+        document.fileName,
+      ),
+      ...workspace.service.getSemanticDiagnostics(
+        document.fileName,
+      ),
+    ];
+
+    return diagnostics.map(
+      (diagnostic) =>
+        this.toDiagnostic(
+          diagnostic,
+          document,
+        ),
+    );
+  }
+
+  private getTypeScriptCompletions(
+    session: SessionWithVersions,
+    document: LspDocument,
+    position: LspPosition,
+  ): LspCompletion[] {
+    const workspace =
+      this.ensureTsWorkspace(
+        session.workspaceId,
+        session.rootPath,
+      );
+
+    const offset =
+      this.positionToOffset(
+        document.text,
+        position,
+      );
+
+    const result =
+      workspace.service.getCompletionsAtPosition(
+        document.fileName,
+        offset,
+        {
+          includeInsertTextCompletions:
+            true,
+        },
+      );
+
+    if (!result) {
+      return [];
+    }
+
+    return result.entries.map(
+      (entry: any) => ({
+        label:
+          entry.name,
+        kind:
+          entry.kind,
+        detail:
+          entry.kindModifiers ||
+          undefined,
+        insertText:
+          entry.insertText ??
+          entry.name,
+      }),
+    );
+  }
+
+  private getBasicDiagnostics(
+    document: LspDocument,
+  ): LspDiagnostic[] {
+    const diagnostics: LspDiagnostic[] =
+      [];
+
+    const stack: string[] =
+      [];
+
+    const text =
+      document.text;
+
+    for (
+      let index = 0;
+      index < text.length;
+      index += 1
+    ) {
+      const character =
+        text[index];
+
+      if (
+        character === '(' ||
+        character === '{' ||
+        character === '['
+      ) {
+        stack.push(
+          character,
+        );
+        continue;
+      }
+
+      if (
+        character === ')' ||
+        character === '}' ||
+        character === ']'
+      ) {
+        const expected =
+          character === ')'
+            ? '('
+            : character === '}'
+              ? '{'
+              : '[';
+
+        if (
+          stack[
+            stack.length - 1
+          ] === expected
+        ) {
+          stack.pop();
         }
       }
-      if (params.language === 'typescript' || params.language === 'javascript') {
-        this.syncTsWorkspace(existing);
-      }
-      return existing;
     }
 
-    if (this.sessions.size >= env.LSP_MAX_PROCESSES) {
-      throw new AppError(
-        429,
-        `Active language server limit reached (${env.LSP_MAX_PROCESSES}). Stop an idle workspace LSP first.`,
-        'LSP_LIMIT_REACHED',
-      );
-    }
+    if (
+      stack.length > 0
+    ) {
+      const offset =
+        Math.max(
+          0,
+          text.length - 1,
+        );
 
-    const config = getLspLanguageConfig(params.language);
-    let provider = `${params.language}-builtin`;
-    if (params.language === 'typescript' || params.language === 'javascript') {
-      provider = 'typescript-compiler-service';
-    } else if (params.language === 'python') {
-      provider = isBinaryAvailable('pyright-langserver')
-        ? 'pyright-langserver+builtin'
-        : 'python-ast-analyzer';
-    } else if (config.mode === 'stub') {
-      provider = `${config.binaryName}-stub`;
-    }
+      const position =
+        this.offsetToPosition(
+          text,
+          offset,
+        );
 
-    const fileContents = new Map<string, string>();
-    const fileVersions = new Map<string, number>();
-    for (const f of params.initialFiles) {
-      fileContents.set(f.path, f.content);
-      fileVersions.set(f.path, 1);
-    }
-
-    const session: LspSessionState = {
-      sessionKey: key,
-      workspaceId: params.workspaceId,
-      userId: params.userId,
-      language: params.language,
-      provider,
-      mode: config.mode,
-      lastActivityAt: Date.now(),
-      fileContents,
-      fileVersions,
-    };
-
-    this.sessions.set(key, session);
-    if (params.language === 'typescript' || params.language === 'javascript') {
-      this.ensureTsService(session);
-    }
-    return session;
-  }
-
-  private ensureTsService(session: LspSessionState): TsWorkspaceService {
-    const existing = this.tsServices.get(session.workspaceId);
-    if (existing) {
-      this.syncTsWorkspace(session);
-      return existing;
-    }
-
-    const contents = new Map<string, string>(session.fileContents);
-    const versions = new Map<string, number>(session.fileVersions);
-
-    const host: ts.LanguageServiceHost = {
-      getScriptFileNames: () => Array.from(contents.keys()),
-      getScriptVersion: (fileName) => String(versions.get(fileName) ?? 1),
-      getScriptSnapshot: (fileName) => {
-        const text = contents.get(fileName);
-        if (text === undefined) return undefined;
-        return ts.ScriptSnapshot.fromString(text);
-      },
-      getCurrentDirectory: () => '/workspace',
-      getCompilationSettings: () => ({
-        allowJs: true,
-        checkJs: true,
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.ESNext,
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        jsx: ts.JsxEmit.ReactJSX,
-        strict: false,
-        noEmit: true,
-      }),
-      getDefaultLibFileName: () => ts.getDefaultLibFilePath({ target: ts.ScriptTarget.ES2022 }),
-      fileExists: (fileName) => contents.has(fileName) || ts.sys.fileExists(fileName),
-      readFile: (fileName) => contents.get(fileName) ?? ts.sys.readFile(fileName),
-    };
-
-    const service = ts.createLanguageService(host, ts.createDocumentRegistry());
-    const entry = { service, contents, versions };
-    this.tsServices.set(session.workspaceId, entry);
-    return entry;
-  }
-
-  private syncTsWorkspace(session: LspSessionState): void {
-    const tsSvc = this.tsServices.get(session.workspaceId);
-    if (!tsSvc) return;
-    for (const [filePath, text] of session.fileContents.entries()) {
-      const prev = tsSvc.contents.get(filePath);
-      if (prev !== text) {
-        tsSvc.contents.set(filePath, text);
-        tsSvc.versions.set(filePath, (tsSvc.versions.get(filePath) ?? 0) + 1);
-      }
-    }
-  }
-
-  updateDocument(
-    session: LspSessionState,
-    filePath: string,
-    text: string,
-    version?: number,
-  ): void {
-    session.lastActivityAt = Date.now();
-    session.fileContents.set(filePath, text);
-    const nextVer = version ?? (session.fileVersions.get(filePath) ?? 0) + 1;
-    session.fileVersions.set(filePath, nextVer);
-
-    if (session.language === 'typescript' || session.language === 'javascript') {
-      const tsSvc = this.ensureTsService(session);
-      tsSvc.contents.set(filePath, text);
-      tsSvc.versions.set(filePath, nextVer);
-    }
-  }
-
-  getDiagnostics(session: LspSessionState, filePath: string): LspDiagnostic[] {
-    session.lastActivityAt = Date.now();
-    const text = session.fileContents.get(filePath) ?? '';
-
-    if (session.language === 'typescript' || session.language === 'javascript') {
-      const tsSvc = this.ensureTsService(session);
-      if (!tsSvc.contents.has(filePath)) return [];
-      const syntactic = tsSvc.service.getSyntacticDiagnostics(filePath);
-      const semantic = tsSvc.service.getSemanticDiagnostics(filePath);
-      const combined = [...syntactic, ...semantic].slice(0, 50);
-
-      return combined.map((d) => {
-        const start = d.start ?? 0;
-        const length = d.length ?? 1;
-        const startPos = offsetToPosition(text, start);
-        const endPos = offsetToPosition(text, start + Math.max(1, length));
-        const severity: 1 | 2 | 3 | 4 =
-          d.category === ts.DiagnosticCategory.Error
-            ? 1
-            : d.category === ts.DiagnosticCategory.Warning
-              ? 2
-              : 3;
-        return {
-          range: { start: startPos, end: endPos },
-          severity,
-          code: d.code,
-          source: 'ts-lsp',
-          message: ts.flattenDiagnosticMessageText(d.messageText, '\n'),
-        };
-      });
-    }
-
-    if (session.language === 'python') {
-      return this.analyzePythonDiagnostics(text);
-    }
-
-    return this.analyzeBraceLanguageDiagnostics(session.language, text);
-  }
-
-  getCompletions(
-    session: LspSessionState,
-    filePath: string,
-    position: LspPosition,
-  ): LspCompletionItem[] {
-    session.lastActivityAt = Date.now();
-    const text = session.fileContents.get(filePath) ?? '';
-
-    if (session.language === 'typescript' || session.language === 'javascript') {
-      const tsSvc = this.ensureTsService(session);
-      if (!tsSvc.contents.has(filePath)) return [];
-      const offset = positionToOffset(text, position);
-      const info = tsSvc.service.getCompletionsAtPosition(filePath, offset, {
-        includeCompletionsWithInsertText: true,
-      });
-      if (!info) return [];
-      return info.entries.slice(0, 40).map((entry) => ({
-        label: entry.name,
-        kind:
-          entry.kind === ts.ScriptElementKind.functionElement ||
-          entry.kind === ts.ScriptElementKind.memberFunctionElement
-            ? 'function'
-            : entry.kind === ts.ScriptElementKind.classElement
-              ? 'class'
-              : entry.kind === ts.ScriptElementKind.keyword
-                ? 'keyword'
-                : 'variable',
-        detail: entry.kindModifiers ? `${entry.kind} (${entry.kindModifiers})` : String(entry.kind),
-        insertText: entry.insertText ?? entry.name,
-      }));
-    }
-
-    if (session.language === 'python') {
-      return this.getPythonCompletions(session, text);
-    }
-
-    const pool = session.language === 'java' ? JAVA_KEYWORDS : C_CPP_KEYWORDS;
-    return pool.map((kw) => ({
-      label: kw,
-      kind: 'keyword',
-      detail: `${session.language} language item`,
-      insertText: kw,
-    }));
-  }
-
-  getHover(
-    session: LspSessionState,
-    filePath: string,
-    position: LspPosition,
-  ): LspHoverResult | null {
-    session.lastActivityAt = Date.now();
-    const text = session.fileContents.get(filePath) ?? '';
-
-    if (session.language === 'typescript' || session.language === 'javascript') {
-      const tsSvc = this.ensureTsService(session);
-      if (!tsSvc.contents.has(filePath)) return null;
-      const offset = positionToOffset(text, position);
-      const quickInfo = tsSvc.service.getQuickInfoAtPosition(filePath, offset);
-      if (!quickInfo) return null;
-      const display = ts.displayPartsToString(quickInfo.displayParts);
-      const docs = ts.displayPartsToString(quickInfo.documentation);
-      const contents = docs ? `${display}\n\n${docs}` : display;
-      return {
-        contents,
-        range: {
-          start: offsetToPosition(text, quickInfo.textSpan.start),
-          end: offsetToPosition(
-            text,
-            quickInfo.textSpan.start + quickInfo.textSpan.length,
+      diagnostics.push({
+        message:
+          'Possible unmatched bracket, brace, or parenthesis.',
+        severity:
+          2,
+        source:
+          'cloud-ide',
+        range:
+          this.createRange(
+            position,
+            position,
           ),
-        },
+        start:
+          offset,
+        length:
+          1,
+        line:
+          position.line,
+        column:
+          position.character,
+      } as LspDiagnostic);
+    }
+
+    return diagnostics;
+  }
+
+  private getKeywordCompletions(
+    language: string,
+  ): LspCompletion[] {
+    return this.getKeywords(
+      language,
+    ).map(
+      (keyword) => ({
+        label:
+          keyword,
+        kind:
+          'Keyword',
+        insertText:
+          keyword,
+      }),
+    );
+  }
+
+  private getKeywords(
+    language: string,
+  ): string[] {
+    const value =
+      language.toLowerCase();
+
+    if (
+      value === 'python' ||
+      value === 'py'
+    ) {
+      return [
+        'and',
+        'as',
+        'assert',
+        'async',
+        'await',
+        'break',
+        'class',
+        'continue',
+        'def',
+        'del',
+        'elif',
+        'else',
+        'except',
+        'False',
+        'finally',
+        'for',
+        'from',
+        'global',
+        'if',
+        'import',
+        'in',
+        'is',
+        'lambda',
+        'None',
+        'not',
+        'or',
+        'pass',
+        'raise',
+        'return',
+        'True',
+        'try',
+        'while',
+        'with',
+        'yield',
+      ];
+    }
+
+    if (
+      value === 'java'
+    ) {
+      return [
+        'abstract',
+        'boolean',
+        'break',
+        'byte',
+        'case',
+        'catch',
+        'char',
+        'class',
+        'const',
+        'continue',
+        'default',
+        'do',
+        'double',
+        'else',
+        'enum',
+        'extends',
+        'final',
+        'finally',
+        'float',
+        'for',
+        'if',
+        'implements',
+        'import',
+        'instanceof',
+        'int',
+        'interface',
+        'long',
+        'new',
+        'package',
+        'private',
+        'protected',
+        'public',
+        'return',
+        'short',
+        'static',
+        'super',
+        'switch',
+        'this',
+        'throw',
+        'throws',
+        'try',
+        'void',
+        'volatile',
+        'while',
+      ];
+    }
+
+    if (
+      value === 'c' ||
+      value === 'cpp' ||
+      value === 'c++'
+    ) {
+      return [
+        'auto',
+        'bool',
+        'break',
+        'case',
+        'char',
+        'class',
+        'const',
+        'continue',
+        'default',
+        'delete',
+        'do',
+        'double',
+        'else',
+        'enum',
+        'false',
+        'float',
+        'for',
+        'if',
+        'include',
+        'int',
+        'long',
+        'namespace',
+        'new',
+        'private',
+        'protected',
+        'public',
+        'return',
+        'short',
+        'signed',
+        'sizeof',
+        'static',
+        'struct',
+        'switch',
+        'template',
+        'this',
+        'throw',
+        'true',
+        'try',
+        'typedef',
+        'typename',
+        'union',
+        'unsigned',
+        'using',
+        'virtual',
+        'void',
+        'volatile',
+        'while',
+      ];
+    }
+
+    return [];
+  }
+
+  private toDiagnostic(
+    diagnostic: any,
+    document: LspDocument,
+  ): LspDiagnostic {
+    const start =
+      diagnostic.start ??
+      0;
+
+    const length =
+      diagnostic.length ??
+      1;
+
+    const startPosition =
+      this.offsetToPosition(
+        document.text,
+        start,
+      );
+
+    const endPosition =
+      this.offsetToPosition(
+        document.text,
+        start + length,
+      );
+
+    return {
+      message:
+        ts.flattenDiagnosticMessageText(
+          diagnostic.messageText,
+          '\n',
+        ),
+      severity:
+        this.mapSeverity(
+          diagnostic.category,
+        ),
+      source:
+        'typescript',
+      range:
+        this.createRange(
+          startPosition,
+          endPosition,
+        ),
+      start,
+      length,
+      line:
+        startPosition.line,
+      column:
+        startPosition.character,
+    } as LspDiagnostic;
+  }
+
+  private mapSeverity(
+    category: number,
+  ): number {
+    const error =
+      ts.DiagnosticCategory?.Error ??
+      1;
+
+    const warning =
+      ts.DiagnosticCategory?.Warning ??
+      0;
+
+    const suggestion =
+      ts.DiagnosticCategory?.Suggestion ??
+      2;
+
+    if (
+      category === error
+    ) {
+      return 1;
+    }
+
+    if (
+      category === warning
+    ) {
+      return 2;
+    }
+
+    if (
+      category === suggestion
+    ) {
+      return 3;
+    }
+
+    return 4;
+  }
+
+  private normalizePosition(
+    position:
+      | LspPosition
+      | number,
+    character?: number,
+  ): LspPosition {
+    if (
+      typeof position ===
+      'number'
+    ) {
+      return {
+        line:
+          Math.max(
+            0,
+            position,
+          ),
+        character:
+          Math.max(
+            0,
+            character ?? 0,
+          ),
       };
     }
 
-    const word = wordAtPosition(text, position);
-    if (!word) return null;
-
-    if (session.language === 'python') {
-      if (PYTHON_BUILTINS[word]) {
-        return { contents: PYTHON_BUILTINS[word] };
-      }
-      const defMatch = this.findPythonSymbolDefinition(session, word);
-      if (defMatch) {
-        return {
-          contents: `Python symbol \`${word}\` defined at ${defMatch.filePath}:${defMatch.range.start.line + 1}`,
-          range: defMatch.range,
-        };
-      }
-    }
-
-    return null;
-  }
-
-  getDefinition(
-    session: LspSessionState,
-    filePath: string,
-    position: LspPosition,
-  ): LspLocation[] {
-    session.lastActivityAt = Date.now();
-    const text = session.fileContents.get(filePath) ?? '';
-
-    if (session.language === 'typescript' || session.language === 'javascript') {
-      const tsSvc = this.ensureTsService(session);
-      if (!tsSvc.contents.has(filePath)) return [];
-      const offset = positionToOffset(text, position);
-      const defs = tsSvc.service.getDefinitionAtPosition(filePath, offset);
-      if (!defs) return [];
-
-      return defs.map((def) => {
-        const targetText = session.fileContents.get(def.fileName) ?? text;
-        return {
-          uri: `workspace://${def.fileName}`,
-          filePath: def.fileName,
-          range: {
-            start: offsetToPosition(targetText, def.textSpan.start),
-            end: offsetToPosition(targetText, def.textSpan.start + def.textSpan.length),
-          },
-        };
-      });
-    }
-
-    if (session.language === 'python') {
-      const word = wordAtPosition(text, position);
-      if (!word) return [];
-      const found = this.findPythonSymbolDefinition(session, word);
-      return found ? [found] : [];
-    }
-
-    return [];
-  }
-
-  getReferences(
-    session: LspSessionState,
-    filePath: string,
-    position: LspPosition,
-  ): LspLocation[] {
-    session.lastActivityAt = Date.now();
-    const text = session.fileContents.get(filePath) ?? '';
-
-    if (session.language === 'typescript' || session.language === 'javascript') {
-      const tsSvc = this.ensureTsService(session);
-      if (!tsSvc.contents.has(filePath)) return [];
-      const offset = positionToOffset(text, position);
-      const refs = tsSvc.service.getReferencesAtPosition(filePath, offset);
-      if (!refs) return [];
-
-      return refs.map((ref) => {
-        const targetText = session.fileContents.get(ref.fileName) ?? text;
-        return {
-          uri: `workspace://${ref.fileName}`,
-          filePath: ref.fileName,
-          range: {
-            start: offsetToPosition(targetText, ref.textSpan.start),
-            end: offsetToPosition(targetText, ref.textSpan.start + ref.textSpan.length),
-          },
-        };
-      });
-    }
-
-    if (session.language === 'python') {
-      const word = wordAtPosition(text, position);
-      if (!word) return [];
-      const pattern = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
-      const results: LspLocation[] = [];
-      for (const [fPath, content] of session.fileContents.entries()) {
-        if (!fPath.endsWith('.py')) continue;
-        const lines = content.split('\n');
-        lines.forEach((line, idx) => {
-          let match: RegExpExecArray | null;
-          while ((match = pattern.exec(line)) !== null) {
-            results.push({
-              uri: `workspace://${fPath}`,
-              filePath: fPath,
-              range: {
-                start: { line: idx, character: match.index },
-                end: { line: idx, character: match.index + word.length },
-              },
-            });
-          }
-        });
-      }
-      return results;
-    }
-
-    return [];
-  }
-
-  getCodeActions(
-    session: LspSessionState,
-    filePath: string,
-    range: LspRange,
-  ): LspCodeAction[] {
-    session.lastActivityAt = Date.now();
-    const text = session.fileContents.get(filePath) ?? '';
-    const lines = text.split('\n');
-
-    if (session.language === 'python') {
-      const lineText = lines[range.start.line] ?? '';
-      if (/^\s*(def|class|if|elif|else|for|while|try|except|finally|with)\b/.test(lineText) && !lineText.trimEnd().endsWith(':')) {
-        return [
-          {
-            title: 'Add missing trailing colon (:)',
-            kind: 'quickfix',
-            filePath,
-            editText: `${lineText.replace(/\s+$/, '')}:`,
-            range: {
-              start: { line: range.start.line, character: 0 },
-              end: { line: range.start.line, character: lineText.length },
-            },
-          },
-        ];
-      }
-    }
-
-    return [];
-  }
-
-  private analyzePythonDiagnostics(text: string): LspDiagnostic[] {
-    const diagnostics: LspDiagnostic[] = [];
-    const lines = text.split('\n');
-    lines.forEach((rawLine, idx) => {
-      const trimmed = rawLine.trim();
-      if (!trimmed || trimmed.startsWith('#')) return;
-      if (
-        /^(def|class|if|elif|else|for|while|try|except|finally|with)\b/.test(trimmed) &&
-        !trimmed.endsWith(':') &&
-        !trimmed.endsWith('\\')
-      ) {
-        diagnostics.push({
-          range: {
-            start: { line: idx, character: Math.max(0, rawLine.length - 1) },
-            end: { line: idx, character: rawLine.length },
-          },
-          severity: 1,
-          code: 'PY_SYNTAX_COLON',
-          source: 'python-lsp',
-          message: 'Expected ":" at the end of statement header.',
-        });
-      }
-    });
-    return diagnostics;
-  }
-
-  private analyzeBraceLanguageDiagnostics(
-    language: LspLanguage,
-    text: string,
-  ): LspDiagnostic[] {
-    const diagnostics: LspDiagnostic[] = [];
-    let balance = 0;
-    const lines = text.split('\n');
-    lines.forEach((line, idx) => {
-      for (const ch of line) {
-        if (ch === '{') balance += 1;
-        else if (ch === '}') balance -= 1;
-        if (balance < 0) {
-          diagnostics.push({
-            range: {
-              start: { line: idx, character: 0 },
-              end: { line: idx, character: Math.max(1, line.length) },
-            },
-            severity: 1,
-            code: 'UNMATCHED_BRACE',
-            source: `${language}-lsp`,
-            message: 'Unmatched closing brace "}".',
-          });
-          balance = 0;
-        }
-      }
-    });
-    if (balance > 0) {
-      const lastIdx = Math.max(0, lines.length - 1);
-      diagnostics.push({
-        range: {
-          start: { line: lastIdx, character: 0 },
-          end: { line: lastIdx, character: Math.max(1, lines[lastIdx]?.length ?? 0) },
-        },
-        severity: 1,
-        code: 'UNCLOSED_BRACE',
-        source: `${language}-lsp`,
-        message: `Unclosed "{" (${balance} brace${balance > 1 ? 's' : ''} remaining open).`,
-      });
-    }
-    return diagnostics;
-  }
-
-  private getPythonCompletions(
-    session: LspSessionState,
-    currentText: string,
-  ): LspCompletionItem[] {
-    const items: LspCompletionItem[] = [];
-    const seen = new Set<string>();
-
-    const add = (item: LspCompletionItem) => {
-      if (seen.has(item.label)) return;
-      seen.add(item.label);
-      items.push(item);
+    return {
+      line:
+        Math.max(
+          0,
+          position.line,
+        ),
+      character:
+        Math.max(
+          0,
+          position.character,
+        ),
     };
-
-    for (const [name, doc] of Object.entries(PYTHON_BUILTINS)) {
-      add({ label: name, kind: 'function', detail: 'builtin', documentation: doc, insertText: name });
-    }
-    for (const kw of PYTHON_KEYWORDS) {
-      add({ label: kw, kind: 'keyword', detail: 'keyword', insertText: kw });
-    }
-
-    const sources = [currentText, ...Array.from(session.fileContents.values())];
-    for (const src of sources) {
-      const defRegex = /^\s*(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/gm;
-      let m: RegExpExecArray | null;
-      while ((m = defRegex.exec(src)) !== null) {
-        add({
-          label: m[1],
-          kind: 'function',
-          detail: `def ${m[1]}(${m[2].trim()})`,
-          insertText: m[1],
-        });
-      }
-      const classRegex = /^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)/gm;
-      while ((m = classRegex.exec(src)) !== null) {
-        add({ label: m[1], kind: 'class', detail: `class ${m[1]}`, insertText: m[1] });
-      }
-    }
-
-    return items;
   }
 
-  private findPythonSymbolDefinition(
-    session: LspSessionState,
-    symbolName: string,
-  ): LspLocation | null {
-    const escaped = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`^\\s*(?:async\\s+def|def|class)\\s+(${escaped})\\b`);
-
-    for (const [filePath, content] of session.fileContents.entries()) {
-      if (path.posix.extname(filePath).toLowerCase() !== '.py') continue;
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const match = regex.exec(lines[i]);
-        if (match) {
-          const charIdx = lines[i].indexOf(symbolName);
-          return {
-            uri: `workspace://${filePath}`,
-            filePath,
-            range: {
-              start: { line: i, character: Math.max(0, charIdx) },
-              end: { line: i, character: Math.max(0, charIdx) + symbolName.length },
-            },
-          };
-        }
-      }
+  private normalizeRange(
+    text: string,
+    rangeOrStart:
+      | LspRange
+      | number,
+    end?: number,
+  ): {
+    start: number;
+    end: number;
+  } {
+    if (
+      typeof rangeOrStart ===
+      'number'
+    ) {
+      return {
+        start:
+          Math.max(
+            0,
+            rangeOrStart,
+          ),
+        end:
+          Math.max(
+            0,
+            end ??
+              rangeOrStart,
+          ),
+      };
     }
-    return null;
+
+    const start =
+      this.rangePositionToOffset(
+        text,
+        rangeOrStart.start,
+      );
+
+    const endOffset =
+      this.rangePositionToOffset(
+        text,
+        rangeOrStart.end,
+      );
+
+    return {
+      start,
+      end:
+        Math.max(
+          start,
+          endOffset,
+        ),
+    };
   }
 
-  stopSessionByKey(sessionKey: string): void {
-    const existing = this.sessions.get(sessionKey);
-    if (!existing) return;
-    this.sessions.delete(sessionKey);
+  private rangePositionToOffset(
+    text: string,
+    value:
+      | LspPosition
+      | number,
+  ): number {
+    if (
+      typeof value ===
+      'number'
+    ) {
+      return Math.max(
+        0,
+        Math.min(
+          value,
+          text.length,
+        ),
+      );
+    }
 
-    const hasOtherTsForWorkspace = Array.from(this.sessions.values()).some(
-      (s) =>
-        s.workspaceId === existing.workspaceId &&
-        (s.language === 'typescript' || s.language === 'javascript'),
+    return this.positionToOffset(
+      text,
+      value,
     );
-    if (!hasOtherTsForWorkspace) {
-      const tsSvc = this.tsServices.get(existing.workspaceId);
-      if (tsSvc) {
-        tsSvc.service.dispose();
-        this.tsServices.delete(existing.workspaceId);
+  }
+
+  private createRange(
+    start: LspPosition,
+    end: LspPosition,
+  ): LspRange {
+    return {
+      start,
+      end,
+    };
+  }
+
+  private positionToOffset(
+    text: string,
+    position: LspPosition,
+  ): number {
+    if (!text) {
+      return 0;
+    }
+
+    const lines =
+      text.split('\n');
+
+    const line =
+      Math.min(
+        Math.max(
+          position.line,
+          0,
+        ),
+        Math.max(
+          lines.length - 1,
+          0,
+        ),
+      );
+
+    let offset = 0;
+
+    for (
+      let index = 0;
+      index < line;
+      index += 1
+    ) {
+      offset +=
+        lines[index].length +
+        1;
+    }
+
+    return Math.min(
+      text.length,
+      offset +
+        Math.max(
+          0,
+          position.character,
+        ),
+    );
+  }
+
+  private offsetToPosition(
+    text: string,
+    offset: number,
+  ): LspPosition {
+    const safeOffset =
+      Math.max(
+        0,
+        Math.min(
+          offset,
+          text.length,
+        ),
+      );
+
+    let line = 0;
+    let character = 0;
+
+    for (
+      let index = 0;
+      index < safeOffset;
+      index += 1
+    ) {
+      if (
+        text[index] === '\n'
+      ) {
+        line += 1;
+        character = 0;
+      } else {
+        character += 1;
+      }
+    }
+
+    return {
+      line,
+      character,
+    };
+  }
+
+  private getDocument(
+    session: SessionWithVersions,
+    uri?: string,
+  ): LspDocument | undefined {
+    if (uri) {
+      return session.documents.get(
+        uri,
+      );
+    }
+
+    return session.documents
+      .values()
+      .next()
+      .value as
+      | LspDocument
+      | undefined;
+  }
+
+  private getTextForFile(
+    session: SessionWithVersions,
+    fileName: string,
+  ): string {
+    for (
+      const document of
+        session.documents.values()
+    ) {
+      if (
+        document.fileName ===
+        fileName
+      ) {
+        return document.text;
+      }
+    }
+
+    return (
+      ts.sys.readFile(
+        fileName,
+      ) ?? ''
+    );
+  }
+
+  private uriToFileName(
+    uri: string,
+    rootPath: string,
+  ): string {
+    if (
+      uri.startsWith(
+        'file://',
+      )
+    ) {
+      try {
+        return path.normalize(
+          decodeURIComponent(
+            new URL(uri).pathname,
+          ),
+        );
+      } catch {
+        return path.normalize(
+          uri.replace(
+            /^file:\/\//,
+            '',
+          ),
+        );
+      }
+    }
+
+    if (
+      path.isAbsolute(
+        uri,
+      )
+    ) {
+      return path.normalize(
+        uri,
+      );
+    }
+
+    return path.resolve(
+      rootPath,
+      uri,
+    );
+  }
+
+  private isTypeScriptLanguage(
+    language: string,
+  ): boolean {
+    const value =
+      language.toLowerCase();
+
+    return (
+      value ===
+        'typescript' ||
+      value ===
+        'javascript' ||
+      value ===
+        'typescriptreact' ||
+      value ===
+        'javascriptreact' ||
+      value === 'ts' ||
+      value === 'tsx' ||
+      value === 'js' ||
+      value === 'jsx'
+    );
+  }
+
+  private requireInternalSession(
+    sessionId: string,
+  ): SessionWithVersions {
+    const session =
+      this.sessions.get(
+        sessionId,
+      );
+
+    if (!session) {
+      throw new Error(
+        `LSP session not found: ${sessionId}`,
+      );
+    }
+
+    session.lastActivityAt =
+      Date.now();
+
+    return session;
+  }
+
+  private getSessionId(
+    sessionOrId:
+      | string
+      | LspSession,
+  ): string {
+    return typeof sessionOrId ===
+      'string'
+      ? sessionOrId
+      : sessionOrId.sessionId;
+  }
+
+  private isSession(
+    value: unknown,
+  ): value is LspSession {
+    return (
+      typeof value ===
+        'object' &&
+      value !== null &&
+      'sessionId' in value
+    );
+  }
+
+  private toPublicSession(
+    session: SessionWithVersions,
+  ): LspSession {
+    return {
+      sessionId:
+        session.sessionId,
+      workspaceId:
+        session.workspaceId,
+      language:
+        session.language,
+      rootPath:
+        session.rootPath,
+      documents:
+        session.documents,
+      createdAt:
+        session.createdAt,
+      lastActivityAt:
+        session.lastActivityAt,
+    };
+  }
+
+  private cleanupUnusedWorkspaces(): void {
+    const activeWorkspaceIds =
+      new Set<string>();
+
+    for (
+      const session of
+        this.sessions.values()
+    ) {
+      activeWorkspaceIds.add(
+        session.workspaceId,
+      );
+    }
+
+    for (
+      const [
+        workspaceId,
+        workspace,
+      ] of this.tsWorkspaces
+    ) {
+      if (
+        !activeWorkspaceIds.has(
+          workspaceId,
+        )
+      ) {
+        try {
+          workspace.service.dispose();
+        } catch {
+          // Ignore disposal errors.
+        }
+
+        this.tsWorkspaces.delete(
+          workspaceId,
+        );
       }
     }
   }
 
-  stopWorkspaceLanguage(workspaceId: string, language?: LspLanguage): void {
-    if (language) {
-      this.stopSessionByKey(this.makeKey(workspaceId, language));
-      return;
-    }
-    for (const key of Array.from(this.sessions.keys())) {
-      if (key.startsWith(`${workspaceId}:`)) {
-        this.stopSessionByKey(key);
+  private cleanupIdleSessions(): void {
+    const now =
+      Date.now();
+
+    const expiredSessions: string[] =
+      [];
+
+    for (
+      const [
+        sessionId,
+        session,
+      ] of this.sessions
+    ) {
+      if (
+        now -
+          session.lastActivityAt >
+        this.idleTimeoutMs
+      ) {
+        expiredSessions.push(
+          sessionId,
+        );
       }
     }
-  }
 
-  closeAll(): void {
-    if (this.sweepInterval) {
-      clearInterval(this.sweepInterval);
-      this.sweepInterval = null;
+    for (
+      const sessionId of
+        expiredSessions
+    ) {
+      this.stopSession(
+        sessionId,
+      );
     }
-    for (const tsSvc of this.tsServices.values()) {
-      tsSvc.service.dispose();
-    }
-    this.tsServices.clear();
-    this.sessions.clear();
   }
 }
 
-export const lspManager = new LspManager();
+export const lspManager =
+  new LspManager();
+
+export default lspManager;
